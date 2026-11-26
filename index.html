@@ -1,0 +1,1295 @@
+<meta charset="utf-8">
+<title>Breakfree</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#07040c">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--
+  Breakfree 시제품 (MVP 흐름 전체) — 80년대 오락실 스타일 (2026-11-26 전면 아케이드)
+  PRESS START → 꺼내기(입력) → 부수러 가기 → 예상 점수 → 용기 한 마디 + 3분 타이머 → 밀어서 격파 장전
+  → READY? 화면을 그어 파괴 → CLEAR! → 실제 점수 → 별 하나 + CLEAR +1
+  - 최대 3개, 홈에서 좌우로 밀어 전환
+  - 데이터는 이 브라우저에만 저장 (localStorage)
+  - 왼쪽 위 MENU 에서 손맛 수치·진동 조절, 오른쪽 위 CLEAR 숫자를 누르면 기록
+  - 부수는 순간 완료 저장. 타이머·장전·점수 단계는 앱을 다시 열어도 이어짐 (2026-11-25 검토 반영)
+  - 글꼴: 영어·숫자 Press Start 2P(fonts/PressStart2P-latin.woff2, OFL 1.1), 한글 갈무리11(fonts/Galmuri11.woff2, OFL 1.1)
+  - 언어: 한국어·영어·일본어·중국어 간체·번체. 기기 언어로 고르고 MENU에서 바꿀 수 있다 (문구는 아래 STR 한곳에)
+    중국어 화면은 Fusion Pixel 12px 글꼴을 쓴다 (갈무리11에 간체·번체 글자가 모자라서)
+  - 특정 게임의 캐릭터·모양·소리는 따라 하지 않는다. 목숨·GAME OVER 같은 벌칙도 없다.
+-->
+<style>
+  @font-face { font-family: "Galmuri11"; src: url("fonts/Galmuri11.woff2") format("woff2"); font-display: swap; }
+  /* 영어·숫자 도트 글꼴 Press Start 2P (OFL 1.1, @fontsource/press-start-2p 5.3.0의 latin 파일). 구글 서버에서 받지 않고 앱 안에 넣음 (오프라인·개인정보, 2026-11-26) */
+  @font-face { font-family: "Press Start 2P"; src: url("fonts/PressStart2P-latin.woff2") format("woff2"); font-display: swap; }
+  /* 중국어용 도트 글꼴 Fusion Pixel 12px (OFL 1.1, fonts/README.txt). 갈무리11에 없는 간체·번체 글자를 채운다. 중국어 화면에서만 내려받아진다 */
+  @font-face { font-family: "Fusion Pixel SC"; src: url("fonts/fusion-pixel-12px-proportional-zh_hans.woff2") format("woff2"); font-display: swap; }
+  @font-face { font-family: "Fusion Pixel TC"; src: url("fonts/fusion-pixel-12px-proportional-zh_hant.woff2") format("woff2"); font-display: swap; }
+  /* 네온 CRT: 새까만 바탕 + 시안·마젠타·노랑. 글자는 전부 도트 글꼴, 모서리는 전부 직각 */
+  /* 색 테마 4개 (2026-11-25 다 넣고 사용자가 MENU에서 고르게). 여기 :root 값은 기본값인 선라이즈.
+     다른 테마는 아래 스크립트의 THEMES가 같은 변수를 덮어쓴다. --cyan/--mag/--yel/--grn은 '역할' 이름이라 실제 색과 다를 수 있다 */
+  :root { color-scheme: dark; --bg: #07040c; --fg: #f2f2ff; --muted: #c79bb0; --faint: #54365e;
+    --line: #3d2448; --panel: #140a1c; --cyan: #ff9a1f; --mag: #ff4f9a; --yel: #ffe03a; --grn: #3dffb4;
+    --magD: #a8245f; --magDD: #5e0f33; --yelL: #fff3a8; --yelD: #d1a400; --yelDD: #7d5a00; --cyanDD: #7a3d00;
+    --accent: var(--cyan); --btn: var(--yel); --btn-fg: #1a1004;
+    --pixel: "Press Start 2P", "Galmuri11", ui-monospace, monospace; /* 영어·숫자 */
+    --kr: "Galmuri11", "Press Start 2P", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; /* 한글 */ }
+  :root:lang(zh-Hans) { --kr: "Fusion Pixel SC", "Galmuri11", sans-serif; --pixel: "Press Start 2P", "Fusion Pixel SC", monospace; }
+  :root:lang(zh-Hant) { --kr: "Fusion Pixel TC", "Galmuri11", sans-serif; --pixel: "Press Start 2P", "Fusion Pixel TC", monospace; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
+    font-family: var(--kr); font-size: 16px; -webkit-font-smoothing: none; font-smooth: never; text-rendering: optimizeSpeed;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  canvas { display: block; position: fixed; inset: 0; touch-action: none; image-rendering: pixelated; }
+  button { font: inherit; color: inherit; border-radius: 0; }
+  button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--yel); outline-offset: 3px; }
+
+  /* 브라운관 느낌: 주사선 + 가장자리 어둡게 (모든 화면 위에 덮임, 터치는 통과) */
+  body::after { content: ""; position: fixed; inset: 0; z-index: 30; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.2) 2px 3px),
+      radial-gradient(ellipse at center, rgba(0,0,0,0) 62%, rgba(0,0,0,.42) 100%); }
+
+  .bar { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) calc(10px + env(safe-area-inset-right, 0px)) 8px calc(8px + env(safe-area-inset-left, 0px));
+    pointer-events: none; }
+  .bar > * { pointer-events: auto; }
+  #gear, #countBtn { background: none; border: 0; font-family: var(--pixel); font-size: 12px; cursor: pointer; padding: 10px 8px; min-height: 44px; }
+  #gear { color: var(--mag); text-shadow: 0 0 8px color-mix(in srgb, var(--mag) 60%, transparent); }
+  #countBtn { color: var(--cyan); text-shadow: 0 0 8px color-mix(in srgb, var(--cyan) 60%, transparent); }
+  #countBtn b { display: inline-block; color: var(--fg); font-size: 16px; margin-left: 8px; font-weight: 400; }
+  #countBtn b.pop { color: var(--yel); transform: scale(1.5); }
+
+  .zone { position: fixed; left: 0; right: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 14px;
+    text-align: center; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    pointer-events: none; }
+  .zone > * { pointer-events: auto; }
+  #top { top: calc(60px + env(safe-area-inset-top, 0px)); }
+  #mid { top: 26%; }
+  /* 예시를 펼치면 글이 길어진다(영어·일본어는 더): 위로 올리고, 그래도 넘치면 이 칸만 스크롤 */
+  #mid.tall { top: calc(56px + env(safe-area-inset-top, 0px)); bottom: 0; overflow-y: auto; pointer-events: auto; padding-bottom: 16px; box-sizing: border-box; }
+  #bottom { bottom: calc(5vh + env(safe-area-inset-bottom, 0px)); }
+  #label { position: fixed; left: 16px; right: 16px; z-index: 2; text-align: center; font-size: 20px; line-height: 1.4;
+    color: var(--fg); pointer-events: none; text-shadow: 0 0 10px color-mix(in srgb, var(--cyan) 45%, transparent); }
+
+  /* 오락실 글자: STAGE 표시, 큰 배너, 로고 */
+  .stage { font-family: var(--pixel); font-size: 12px; color: var(--cyan); letter-spacing: .08em; text-shadow: 0 0 8px color-mix(in srgb, var(--cyan) 70%, transparent); }
+  .banner { font-family: var(--pixel); font-size: 24px; color: var(--yel); text-shadow: 3px 3px 0 var(--magD), 0 0 14px color-mix(in srgb, var(--yel) 55%, transparent); }
+  .logo { font-family: var(--pixel); font-size: 40px; line-height: 1.25; color: var(--cyan);
+    text-shadow: 4px 4px 0 var(--mag), 0 0 18px color-mix(in srgb, var(--cyan) 60%, transparent); }
+  .logo span { color: var(--yel); }
+  .tag { font-size: 16px; color: var(--fg); }
+  .blink { animation: blink 1s steps(1) infinite; }
+  .start { background: none; border: 0; font-family: var(--pixel); font-size: 16px; color: var(--yel); padding: 14px 10px; cursor: pointer;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--yel) 60%, transparent); }
+  @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+
+  .dots { display: flex; gap: 8px; }
+  .dots i { width: 8px; height: 8px; background: var(--faint); }
+  .dots i.on { background: var(--yel); box-shadow: 0 0 8px color-mix(in srgb, var(--yel) 80%, transparent); }
+
+  /* 오락실 버튼: 두툼한 네모, 아래에 딱딱한 그림자, 누르면 쑥 들어감 */
+  .primary { position: relative; background: var(--btn); color: var(--btn-fg); border: 0; padding: 14px 28px; min-width: 216px; min-height: 52px;
+    font-size: 20px; cursor: pointer;
+    box-shadow: inset 4px 4px 0 var(--yelL), inset -4px -4px 0 var(--yelD), 0 6px 0 var(--yelDD), 0 0 18px color-mix(in srgb, var(--yel) 35%, transparent); }
+  .primary:active { transform: translateY(6px);
+    box-shadow: inset 4px 4px 0 var(--yelD), inset -4px -4px 0 var(--yelL), 0 0 0 var(--yelDD), 0 0 10px color-mix(in srgb, var(--yel) 30%, transparent); }
+  .links { display: flex; gap: 6px 16px; flex-wrap: wrap; justify-content: center; }
+  .link { background: none; border: 0; color: var(--cyan); font-size: 16px; cursor: pointer; padding: 6px 8px; min-height: 44px; }
+  .link:active { color: var(--bg); background: var(--cyan); }
+  .link:disabled { color: var(--faint); cursor: default; background: none; }
+  .q { font-size: 20px; line-height: 1.5; max-width: 17em; text-wrap: balance; }
+  :lang(ko) .q, :lang(ko) .phrase, :lang(ko) .big, :lang(ko) .card p, :lang(ko) #label { word-break: keep-all; }
+  :lang(ja) .q, :lang(ja) .phrase, :lang(ja) .big, :lang(ja) .card p, :lang(ja) #label { line-break: strict; word-break: auto-phrase; } /* 일본어: 낱말 단위로 줄바꿈 (지원 안 하는 브라우저는 무시) */
+  .sub { font-size: 12px; line-height: 1.5; color: var(--muted); }
+  .chips { display: grid; grid-template-columns: repeat(5, 50px); gap: 10px 8px; }
+  .chip { height: 46px; border: 2px solid var(--cyan); background: var(--panel); color: var(--fg); font-family: var(--pixel); font-size: 12px; cursor: pointer;
+    box-shadow: 0 4px 0 var(--cyanDD); }
+  .chip:active { transform: translateY(4px); box-shadow: none; background: var(--cyan); color: var(--bg); }
+  .scale { display: flex; justify-content: space-between; width: 282px; font-size: 12px; color: var(--muted); }
+  .phrase { font-size: 20px; line-height: 1.5; max-width: 16em; text-wrap: balance; }
+  .clock { font-family: var(--pixel); font-size: 32px; color: var(--yel); padding: 8px 0; text-shadow: 3px 3px 0 var(--magD), 0 0 14px color-mix(in srgb, var(--yel) 50%, transparent); }
+  .clock.done { font-family: var(--kr); font-size: 16px; color: var(--grn); padding: 14px 0; text-shadow: 0 0 10px color-mix(in srgb, var(--grn) 50%, transparent); }
+  .combo { font-family: var(--pixel); font-size: 16px; color: var(--mag); text-shadow: 2px 2px 0 var(--magDD), 0 0 12px color-mix(in srgb, var(--mag) 70%, transparent);
+    animation: pop .3s steps(3); }
+  .plus { position: fixed; z-index: 6; font-family: var(--pixel); font-size: 12px; color: var(--yel); pointer-events: none;
+    animation: up .9s steps(6) forwards; }
+  @keyframes pop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes up { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-18px); } }
+  @media (prefers-reduced-motion: reduce) { .combo, .plus, .blink { animation: none; } }
+
+  .slide { position: relative; width: min(300px, 86vw); height: 56px; background: var(--panel);
+    border: 2px solid var(--mag); overflow: hidden; touch-action: none; box-sizing: border-box; box-shadow: 0 0 12px color-mix(in srgb, var(--mag) 35%, transparent); }
+  .slide span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-left: 44px;
+    font-size: 16px; color: var(--muted); pointer-events: none; }
+  .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+    background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--mag) 55%, transparent) 0 8px, color-mix(in srgb, var(--mag) 25%, transparent) 8px 16px); }
+  .knob { position: absolute; left: 4px; top: 4px; width: 44px; height: 44px; background: var(--yel); color: var(--btn-fg);
+    display: flex; align-items: center; justify-content: center; font-family: var(--pixel); font-size: 16px; cursor: grab; touch-action: none;
+    box-shadow: inset 3px 3px 0 var(--yelL), inset -3px -3px 0 var(--yelD); }
+  form.inp { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+  .inp input { width: min(340px, 100%); box-sizing: border-box; background: var(--panel); border: 2px solid var(--cyan);
+    color: var(--yel); caret-color: var(--yel); font: inherit; font-size: 20px; text-align: center; padding: 12px 8px; outline: none; border-radius: 0;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--cyan) 30%, transparent); -webkit-user-select: text; user-select: text; }
+  .inp input::placeholder { color: var(--faint); }
+  .inp input:focus { border-color: var(--yel); box-shadow: 0 0 14px color-mix(in srgb, var(--yel) 40%, transparent); }
+  .big { font-size: 24px; line-height: 1.4; color: var(--fg); text-shadow: 0 0 12px color-mix(in srgb, var(--cyan) 50%, transparent); max-width: 13em; text-wrap: balance; }
+  .hints { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 360px; }
+  .hint { border: 2px solid var(--line); color: var(--fg); font-size: 12px; min-height: 36px; padding: 6px 10px; background: var(--panel); }
+
+  #toast { position: fixed; left: 16px; right: 16px; top: calc(92px + env(safe-area-inset-top, 0px)); z-index: 6; text-align: center;
+    font-size: 16px; color: var(--yel); opacity: 0; pointer-events: none; text-shadow: 0 0 10px color-mix(in srgb, var(--yel) 50%, transparent); }
+  #toast.on { opacity: 1; }
+
+  #modal { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.78); display: flex; align-items: center; justify-content: center;
+    padding: 16px; box-sizing: border-box; }
+  .card { background: var(--panel); border: 2px solid var(--cyan); outline: 2px solid var(--bg); box-shadow: 0 0 0 4px var(--mag), 0 0 24px color-mix(in srgb, var(--cyan) 35%, transparent);
+    padding: 20px; width: 100%; max-width: 380px; max-height: 80vh; overflow: auto; box-sizing: border-box; -webkit-user-select: text; user-select: text; }
+  .card h2 { margin: 0 0 12px; font-size: 20px; font-weight: 400; color: var(--yel); }
+  .card h2 small { display: block; font-family: var(--pixel); font-size: 12px; color: var(--cyan); margin-bottom: 8px; }
+  .card p { margin: 0 0 12px; font-size: 16px; line-height: 1.55; color: var(--fg); }
+  .card p.sub { font-size: 12px; color: var(--muted); }
+  /* 기록 = 오락실 랭킹표 모양 */
+  .log { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; }
+  .log li { display: grid; grid-template-columns: 28px 1fr auto; gap: 2px 8px; padding: 8px 0; border-bottom: 2px dotted var(--line); font-size: 16px; align-items: baseline; }
+  .log li i { font-family: var(--pixel); font-size: 12px; font-style: normal; color: var(--mag); }
+  .log li span { min-width: 0; overflow-wrap: anywhere; }
+  .log li em { font-family: var(--pixel); font-size: 12px; font-style: normal; color: var(--yel); }
+  .log li time { grid-column: 2; font-size: 12px; color: var(--muted); align-self: center; }
+  .log li .rm { justify-self: end; min-height: 32px; font-size: 12px; padding: 4px 6px; }
+  .card .row { display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+  .card .primary { min-width: 120px; font-size: 16px; min-height: 44px; padding: 10px 20px; }
+  .resets { display: flex; flex-direction: column; align-items: flex-start; margin-top: 10px; }
+  .resets .link { font-size: 12px; color: var(--muted); text-align: left; }
+
+  #panel { position: fixed; z-index: 7; top: calc(54px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px));
+    background: var(--panel); border: 2px solid var(--mag); box-shadow: 0 0 16px color-mix(in srgb, var(--mag) 35%, transparent); padding: 10px 14px 12px; font-size: 12px; width: 224px; }
+  #panel label { display: block; margin: 10px 0 2px; color: var(--muted); }
+  #panel .v { float: right; color: var(--yel); }
+  #panel input[type=range] { width: 100%; accent-color: var(--yel); }
+  #panel .chk { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  #panel .privacy { display: block; margin-top: 12px; color: var(--muted); font-size: 11px; text-decoration: underline; }
+  #panel .langLbl { margin-top: 2px; line-height: 1.5; }
+  #panel .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #panel .themes button { margin-top: 0; display: flex; align-items: center; gap: 6px; padding: 6px; text-align: left; line-height: 1.3; }
+  #panel .themes button[aria-pressed="true"] { border-color: var(--yel); color: var(--yel); }
+  #panel .sw { flex: none; width: 18px; height: 18px; border: 1px solid #000; }
+  #panel select { width: 100%; background: var(--bg); color: var(--fg); border: 2px solid var(--line); border-radius: 0; font: inherit; font-size: 12px; padding: 6px 4px; }
+  #panel button { margin-top: 12px; background: var(--bg); color: var(--fg); border: 2px solid var(--line); padding: 6px 10px; font-size: 12px; cursor: pointer; }
+  /* 사용 방식 개선 (2026-11-25): 지금 할 것 / 언제 할래? */
+  #label.now { font-size: 24px; color: var(--yel); text-shadow: 0 0 12px color-mix(in srgb, var(--yel) 50%, transparent); }
+  #label .nowtag { display: block; font-family: var(--kr); font-size: 12px; color: var(--cyan); margin-bottom: 6px; text-shadow: 0 0 8px color-mix(in srgb, var(--cyan) 60%, transparent); }
+  #label .whentag { display: block; font-size: 13px; color: var(--muted); margin-top: 6px; text-shadow: none; }
+  :lang(en) #label .nowtag { font-family: var(--pixel); font-size: 10px; letter-spacing: .08em; }
+  .whens { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 6px; }
+  .chip.when { width: auto; padding: 0 16px; font-family: var(--kr); }
+  .chip.when[aria-pressed="true"] { border-color: var(--yel); color: var(--yel); }
+  button.clock { background: none; border: 0; cursor: pointer; min-height: 44px; }
+  /* 예상 대 실제: 이 앱의 핵심 비교라서 숫자를 크게 */
+  .vs { display: flex; align-items: flex-end; justify-content: center; gap: 16px; }
+  .vs div { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  :lang(en) .vs div span { font-family: var(--pixel); font-size: 10px; letter-spacing: .08em; }
+  .vs b { font-family: var(--pixel); font-size: 36px; font-weight: 400; line-height: 1; color: var(--muted); }
+  .vs .a b { color: var(--yel); text-shadow: 0 0 14px color-mix(in srgb, var(--yel) 55%, transparent); }
+  .vs i { font-family: var(--pixel); font-style: normal; font-size: 16px; color: var(--cyan); padding-bottom: 10px; }
+  .card .vs { margin: 4px 0 6px; }
+  .card .vs b { font-size: 28px; }
+  .card p.cap { margin: 0 0 14px; font-size: 12px; color: var(--muted); text-align: center; }
+  #label.clip .ltxt { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+  /* 키보드가 올라와 보이는 높이가 낮을 때: 입력 칸을 위로 올리고 이 칸만 스크롤 (버튼이 키보드 밑에 숨지 않게) */
+  html.short #mid.inp { top: calc(48px + env(safe-area-inset-top, 0px)); bottom: auto; height: calc(var(--vvh, 100vh) - 48px - env(safe-area-inset-top, 0px));
+    overflow-y: auto; pointer-events: auto; padding-bottom: 12px; box-sizing: border-box; }
+  html.short #mid.inp form.inp { gap: 10px; }
+  html.short #mid.inp .guide { display: none; }
+</style>
+
+<canvas id="c"></canvas>
+<div class="bar">
+  <button id="gear" aria-label="메뉴: 손맛 설정">MENU</button>
+  <button id="countBtn" data-act="log" aria-label="부순 기록 보기">CLEAR<b id="num">000</b></button>
+</div>
+<div id="label"></div>
+<div class="zone" id="top"></div>
+<div class="zone" id="mid"></div>
+<div class="zone" id="bottom"></div>
+<div id="toast"></div>
+<div id="modal" hidden></div>
+<div id="panel" hidden>
+  <!-- 언어는 맨 위에, 이름은 다섯 언어로 함께 (말을 못 읽어도 찾을 수 있게. 11-25) -->
+  <label for="langSel" class="langLbl">언어 · Language · 言語 · 语言 · 語言</label>
+  <select id="langSel"></select>
+  <label id="themeLbl"></label>
+  <div class="themes" id="themes" role="group"></div>
+  <label><span data-t="hitstop">히트 스톱(멈칫)</span> <span class="v" id="v_hitstop"></span></label>
+  <input type="range" id="hitstop" min="0" max="300" step="10">
+  <label><span data-t="shake">화면 흔들림</span> <span class="v" id="v_shake"></span></label>
+  <input type="range" id="shake" min="0" max="40" step="1">
+  <label><span data-t="shards">파편 수</span> <span class="v" id="v_shards"></span></label>
+  <input type="range" id="shards" min="10" max="160" step="5">
+  <label><span data-t="vol">소리 크기</span> <span class="v" id="v_vol"></span></label>
+  <input type="range" id="vol" min="0" max="1" step="0.05">
+  <label class="chk"><input type="checkbox" id="vib"> <span data-t="vib">진동</span></label>
+  <button id="reset" data-t="reset">기본값</button>
+  <a id="privacyLink" class="privacy" data-t="privacy" href="privacy/ko.html" target="_blank" rel="noopener">개인정보처리방침</a>
+</div>
+
+<script>
+// 오프라인용 서비스 워커: https 단독 주소에서만 등록 (끼워진 화면·파일로 열 때는 건너뜀)
+if ('serviceWorker' in navigator && location.protocol === 'https:' && window.top === window) {
+  addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const nowS = () => performance.now() / 1000;
+
+  // ---------- 언어 (2026-11-25: 한·영·일·간체·번체). 번역은 초안이라 원어민 확인 전 ----------
+  // 화면 문구는 전부 여기서 꺼낸다. {n} 같은 자리는 tr()이 채운다. 영어 복수형은 {s}
+  const STR = {"ko":{"page_title":"Breakfree","tagline":"걱정, 근심, 다 별거 아니야","tap_start":"화면을 눌러 시작","aria_menu":"메뉴: 손맛 설정","aria_log":"부순 기록 보기","hitstop":"히트 스톱(멈칫)","shake":"화면 흔들림","shards":"파편 수","vol":"소리 크기","vib":"진동","lang":"언어","reset":"기본값","q_start":"지금 피하고 있는 것 중, 3분 안에 손댈 수 있는 건?","q_done":"오늘 이미 해낸 일 있어?","ph_start":"예: 서류 파일 열기","ph_done":"예: 수리 예약했다","aria_start":"피하고 있는 것","aria_done":"이미 해낸 일","sub_start":"미룬 일, 귀찮은 일, 피하고 싶은 일 무엇이든","sub_done":"적으면 바로 부술 수 있어","first_guide":"하나 적기 → 폰 내려놓고 해 보기 → 돌아와서 부수기","btn_go":"부수러 가기","btn_pull":"큐브로 만들기","hints_open":"뭐부터 하지?","hints_close":"예시 닫기","mode_start":"지금 할 일 적기","mode_done":"이미 한 일 적기","back":"돌아가기","fs1":"친구에게 안부 연락하기","fs2":"약속 미루자고 말하기","fs3":"지난번 일 사과하기","fs4":"미룬 답장 보내기","fs5":"책상 정리하기","fs6":"빨래 돌리기","fs7":"병원 예약하기","fs8":"과제 시작하기","del_q":"부수지 않고 지울까?","del_yes":"지우기","cancel":"취소","add":"＋ 하나 더 만들기 ({n}/3)","del":"지우기","max3":"3개까지야. 하나 부수고 와.","swipe":"좌우로 밀어서 바꾸기","fear_q":"이거, 얼마나 무겁게 느껴져?","after_q":"해 보니 얼마나 무거웠어?","scale_lo":"별거 아님","scale_hi":"엄청 무거움","skip":"건너뛰기","after_saved":"부순 건 이미 저장됐어","put_phone":"폰 내려놓고 해 봐. 일찍 돌아와도 돼.","slide":"했다면 밀어서 격파 장전","aria_slider":"밀어서 격파 장전 (Enter 키로도 장전)","did":"했어","later":"다음에 할래","timer_end":"시간 끝. 했다면 밀어서 장전해.","cross":"큐브를 가로질러 그어 봐","cross_more":"큐브를 끝까지 가로질러 그어 봐","break_btn":"버튼으로 부수기","p1":"딱 3분만 부딪혀 보자.","p2":"완벽하게 말고, 일단 하자.","p3":"천 리 길도 발밑에서 시작해.","p4":"첫 동작 하나만. 나머지는 따라와.","p5":"실패해도 벌칙 없어. 그냥 해 봐.","p6":"다 하지 않아도 돼. 손만 대 보자.","p7":"오늘 일 하나만 잡자.","p8":"할 수 있는 만큼만. 그거면 충분해.","p9":"마주 본 것만으로 이미 반은 했어.","p10":"3분은 생각보다 길어. 해 보자.","p11":"잘하려 하지 말고, 시작만 하자.","p12":"걱정은 행동 앞에서 작아져.","p13":"한 줄만 쓰자. 전화 한 통만 걸자.","p14":"너는 이것보다 커.","p15":"잘 안 돼도 괜찮아. 해 본 건 남아.","p16":"아무도 채점 안 해. 그냥 움직여.","p17":"숨 한 번 쉬고, 바로 가자.","p18":"미뤄 온 만큼 부수는 맛도 커.","p19":"이번엔 피하지 않기로.","p20":"작게 시작해도 시작은 시작이야.","p21":"3분 뒤에 부수러 오자.","p22":"시작하면 이미 반이야.","r_none":"하나 부쉈다","r_light":"역시, 별거 아니었다","r_lighter":"생각보다 별거 아니었다","r_bit":"조금 가벼워졌다","r_heavier":"생각보다 무거웠는데, 해냈다","r_same":"예상대로, 별거 아니었다","r_tried":"해 보니 별거 아니었다","r_still":"그래도 해냈다","cmp":"예상 {b} → 실제 {a}","today":"오늘 {n}개째 부쉈어","first_star":"부순 일은 별이 돼. 별을 누르면 언제든 다시 볼 수 있어.","ok":"확인","more":"하나 더 만들기","broke_at":"{when}에 부숨","done_tag":" · 이미 한 일","tried":"해 보니 {a}","close":"닫기","again":"이어서 하나 더","c_title":"이건 혼자 부수기엔 무거워 보여","c_body":"부수는 것보다, 믿을 만한 사람에게 먼저 말해 보는 게 좋겠어.","c_sub":"이 앱은 미룬 일을 가볍게 시작하게 돕는 도구야. 상담을 대신하진 못해.","c_ok":"알겠어","c_force":"그냥 큐브로 만들기","log_title":"부순 기록","log_light":"점수를 남긴 {n}개 중 {k}개는 해 보니 3점 이하였어.","log_skipped":"(점수 없이 부순 {n}개는 빼고 셌어)","log_avg":"점수를 남긴 {n}개 평균: 예상 {b} → 실제 {a}","log_rm":"지우기","log_rm_yes":"정말 지우기","log_clear":"부순 기록 {n}개 지우기","log_clear_yes":"한 번 더 누르면 부순 기록 {n}개를 지워","log_reset":"전부 초기화 (꺼내 둔 일 {m}개 포함)","log_reset_yes":"한 번 더 누르면 부순 기록 {n}개와 꺼내 둔 일 {m}개를 모두 지워","log_empty":"아직 부순 게 없어. 첫 번째를 부수면 여기에 남아.","save_fail":"이 기기에 저장하지 못했어. 앱을 닫으면 사라질 수 있어.","come_back":"괜찮아. 준비되면 다시 와.","now_label":"지금 할 것","when_q":"괜찮아. 언제 할지 하나만 골라 볼래?","w1":"밥 먹고 나서","w2":"씻고 나서","w3":"내일 아침에","w_skip":"그냥 나중에","when_tag":"{w} 할 거","when_ok":"정했어. 그때 다시 와.","past_down":"전에 {lo}~{hi}점이었던 {n}개, 해 보니 평균 {a}점이었어.","past_up":"전에 {lo}~{hi}점이었던 {n}개, 해 보니 평균 {a}점. 그래도 다 해냈어.","t_q":"시간을 골라 봐","t_none":"시간 없이","t_min":"{n}분","no_timer":"시간 없이. 했다면 밀어서 장전해.","timer_hint":"시간을 누르면 바꿀 수 있어","when_here":"‘{w}’ 하려던 일, 여기 있어.","lbl_before":"예상","lbl_after":"실제","log_avg_cap":"점수를 남긴 {n}개 평균","privacy":"개인정보처리방침"},"en":{"page_title":"Breakfree","tagline":"Worries? No big deal.","tap_start":"Tap the screen to start","aria_menu":"Menu: feel settings","aria_log":"View break records","hitstop":"Hit stop","shake":"Screen shake","shards":"Shards","vol":"Volume","vib":"Vibration","lang":"Language","reset":"Reset","q_start":"What are you avoiding that you could touch in 3 minutes?","q_done":"Done anything already today?","ph_start":"e.g. Open the document","ph_done":"e.g. Booked the repair","aria_start":"Thing you're avoiding","aria_done":"Thing you already did","sub_start":"Anything you've put off, dread, or want to dodge.","sub_done":"Write it, then break it right away","first_guide":"Write one → Put the phone down and do it → Come back and break it","btn_go":"Go break it","btn_pull":"Make it a cube","hints_open":"Where do I start?","hints_close":"Hide examples","mode_start":"Something to do now","mode_done":"Something I already did","back":"Back","fs1":"Check in on a friend","fs2":"Ask to reschedule plans","fs3":"Apologize for last time","fs4":"Send the reply I've put off","fs5":"Tidy my desk","fs6":"Do the laundry","fs7":"Book a doctor's appointment","fs8":"Start the assignment","del_q":"Delete without breaking?","del_yes":"Delete","cancel":"Cancel","add":"+ Make one more ({n}/3)","del":"Delete","max3":"3 max. Break one first.","swipe":"Swipe left or right to switch","fear_q":"How heavy does this feel?","after_q":"Now that you did it, how heavy was it?","scale_lo":"No big deal","scale_hi":"Super heavy","skip":"Skip","after_saved":"Your break's already saved","put_phone":"Put the phone down and try. Coming back early is fine.","slide":"Did it? Slide to charge","aria_slider":"Slide to charge (Enter also works)","did":"Did it","later":"Maybe later","timer_end":"Time's up. Did it? Slide to charge.","cross":"Swipe across the cube","cross_more":"Swipe all the way across the cube","break_btn":"Break with a button","p1":"Just 3 minutes. Give it a shot.","p2":"Forget perfect. Just start.","p3":"A thousand-mile journey starts beneath your feet.","p4":"Just the first move. The rest follows.","p5":"No penalty for failing. Just try.","p6":"You don't have to finish. Just start on it.","p7":"Just grab today's one task.","p8":"Do what you can. That's enough.","p9":"Facing it is already half the work.","p10":"3 minutes is longer than you think. Go.","p11":"Don't try to do it well. Just start.","p12":"Worry shrinks when you move.","p13":"One line. One call. That's it.","p14":"You're bigger than this.","p15":"If it goes badly, that's okay. The try still counts.","p16":"Nobody's grading. Just move.","p17":"One breath, then go.","p18":"The longer you put it off, the sweeter the break.","p19":"Not dodging this time.","p20":"A small start is still a start.","p21":"Come back in 3 minutes and break it.","p22":"Once you start, you're halfway there.","r_none":"Broke one.","r_light":"See? No big deal.","r_lighter":"Not as big as I thought.","r_bit":"A little lighter.","r_heavier":"Heavier than I thought, but I did it.","r_same":"As expected, no big deal.","r_tried":"Tried it. No big deal.","r_still":"Still, I did it.","cmp":"Before {b} → After {a}","today":"{n} broken today","first_star":"Broken things become stars. Tap one anytime to look back.","ok":"OK","more":"Make one more","broke_at":"Broken {when}","done_tag":" · Already done","tried":"After: {a}","close":"Close","again":"Do this one again","c_title":"This looks too heavy to break alone","c_body":"Before breaking it, maybe talk to someone you trust.","c_sub":"This app helps you get started on things you've put off. It can't replace counseling.","c_ok":"Got it","c_force":"Make it a cube anyway","log_title":"Break records","log_light":"Of {n} scored, {k} turned out 3 or lower.","log_skipped":"(not counting {n} broken without a score)","log_avg":"Average of {n} scored: before {b} → after {a}","log_rm":"Delete","log_rm_yes":"Really delete","log_clear":"Delete {n} record{s}","log_clear_yes":"Tap again to delete {n} record{s}","log_reset":"Reset all (incl. {m} waiting)","log_reset_yes":"Tap again to delete {n} record{s} and {m} waiting","log_empty":"Nothing broken yet. Your first one will show up here.","save_fail":"Couldn't save on this device. It may be lost when you close the app.","come_back":"It's okay. Come back when you're ready.","now_label":"NOW","when_q":"It's okay. Want to pick when you'll do it?","w1":"After I eat","w2":"After I wash up","w3":"Tomorrow morning","w_skip":"Just later","when_tag":"Plan: {w}","when_ok":"Got it. Come back then.","past_down":"{n} past ones rated {lo}–{hi} averaged {a} once done.","past_up":"{n} past ones rated {lo}–{hi} averaged {a} once done. You still did them all.","t_q":"Pick a time","t_none":"No timer","t_min":"{n} min","no_timer":"No timer. Did it? Slide to charge.","timer_hint":"Tap the time to change it","when_here":"Here’s the one you planned for “{w}”.","lbl_before":"BEFORE","lbl_after":"AFTER","log_avg_cap":"Average of {n} scored","privacy":"Privacy policy"},"ja":{"page_title":"Breakfree","tagline":"心配も悩みも、ぜんぶ大したことない","tap_start":"画面をタップしてスタート","aria_menu":"メニュー：手ごたえ設定","aria_log":"壊した記録を見る","hitstop":"ヒットストップ","shake":"画面の揺れ","shards":"破片の数","vol":"音量","vib":"バイブ","lang":"言語","reset":"初期値に戻す","q_start":"今避けてることで、3分で手をつけられるのは？","q_done":"今日もうやったことある？","ph_start":"例：書類ファイルを開く","ph_done":"例：修理を予約した","aria_start":"避けていること","aria_done":"もうやったこと","sub_start":"先延ばし、めんどう、避けたいこと、なんでも","sub_done":"書いたらすぐ壊せるよ","first_guide":"1つ書く → スマホを置いてやる → 戻って壊す","btn_go":"壊しに行く","btn_pull":"キューブにする","hints_open":"何からやろう？","hints_close":"例を閉じる","mode_start":"今やることを書く","mode_done":"もうやったことを書く","back":"戻る","fs1":"友だちに連絡してみる","fs2":"約束をずらしたいと伝える","fs3":"この前のことを謝る","fs4":"返してない返信を送る","fs5":"机を片づける","fs6":"洗濯機を回す","fs7":"病院を予約する","fs8":"課題を始める","del_q":"壊さずに消す？","del_yes":"消す","cancel":"キャンセル","add":"＋ もう1つ作る（{n}/3）","del":"消す","max3":"3つまでだよ。1つ壊してきて。","swipe":"左右にスワイプで切り替え","fear_q":"これ、どれくらい重く感じる？","after_q":"やってみて、どれくらい重かった？","scale_lo":"大したことない","scale_hi":"すごく重い","skip":"スキップ","after_saved":"壊したのはもう保存したよ","put_phone":"スマホを置いてやってみて。早めに戻ってもいいよ。","slide":"やったらスライドでチャージ","aria_slider":"スライドでチャージ（Enterキーでも可）","did":"やった","later":"また今度","timer_end":"時間終了。やったらスライドしてチャージ。","cross":"キューブを横切るようになぞって","cross_more":"キューブを端までなぞって","break_btn":"ボタンで壊す","p1":"3分だけ、ぶつかってみよう。","p2":"完璧じゃなくていい。とりあえずやろう。","p3":"千里の道も一歩から。","p4":"最初の一歩だけ。あとはついてくる。","p5":"失敗してもペナルティなし。やってみよう。","p6":"全部やらなくていい。手をつけるだけでいい。","p7":"今日のことを1つだけつかもう。","p8":"できる分だけ。それで十分。","p9":"向き合っただけで、もう半分やったよ。","p10":"3分って意外と長いよ。やってみよう。","p11":"うまくやろうとしないで、始めるだけ。","p12":"心配は、動くと小さくなる。","p13":"1行だけ書こう。電話1本だけかけよう。","p14":"きみの方が、これより大きいよ。","p15":"うまくいかなくても大丈夫。やってみたことは残る。","p16":"誰も採点しないよ。とにかく動こう。","p17":"深呼吸ひとつして、始めよう。","p18":"先延ばしにした分、壊す気持ちよさも大きい。","p19":"今回は、逃げない。","p20":"小さくても、始まりは始まり。","p21":"3分後に壊しに来よう。","p22":"始めたら、もう半分。","r_none":"1つ壊した","r_light":"やっぱり、大したことなかった","r_lighter":"思ったより大したことなかった","r_bit":"ちょっと軽くなった","r_heavier":"思ったより重かったけど、できた","r_same":"予想どおり、大したことなかった","r_tried":"やってみたら大したことなかった","r_still":"それでも、できた","cmp":"予想 {b} → 実際 {a}","today":"今日{n}個目だよ","first_star":"壊したことは星になる。星をタップすればいつでも見られるよ。","ok":"OK","more":"もう1つ作る","broke_at":"{when}に壊した","done_tag":"・もうやったこと","tried":"やってみて {a}","close":"閉じる","again":"続けてもう1回","c_title":"これは一人で壊すには重そう","c_body":"先に、信頼できる人に話してみてね。","c_sub":"このアプリは、先延ばしにしたことを気軽に始めるための道具。カウンセリングの代わりにはならない。","c_ok":"わかった","c_force":"そのままキューブにする","log_title":"壊した記録","log_light":"点数を残した{n}個のうち、{k}個はやってみたら3点以下だった。","log_skipped":"（点数なしで壊した{n}個は除いて数えた）","log_avg":"点数を残した{n}個の平均：予想 {b} → 実際 {a}","log_rm":"消す","log_rm_yes":"本当に消す","log_clear":"壊した記録{n}個を消す","log_clear_yes":"もう一度押すと、壊した記録{n}個を消すよ","log_reset":"全部リセット（書き出したこと{m}個も）","log_reset_yes":"もう一度押すと、壊した記録{n}個と書き出したこと{m}個をぜんぶ消すよ","log_empty":"まだ壊したものはないよ。最初の1つを壊すとここに残る。","save_fail":"この端末に保存できなかった。アプリを閉じると消えるかも。","come_back":"大丈夫。準備できたらまた来て。","now_label":"今やること","when_q":"大丈夫。いつやるか1つ選んでみる？","w1":"ごはんのあと","w2":"お風呂のあと","w3":"明日の朝","w_skip":"とりあえず後で","when_tag":"{w}にやる","when_ok":"決まり。そのときまた来て。","past_down":"前に{lo}〜{hi}点だった{n}個、やってみたら平均{a}点だった。","past_up":"前に{lo}〜{hi}点だった{n}個、やってみたら平均{a}点。それでも全部やれた。","t_q":"時間を選んでね","t_none":"時間なし","t_min":"{n}分","no_timer":"時間なし。やったらスライドしてチャージ。","timer_hint":"時間をタップで変えられるよ","when_here":"「{w}」にやるつもりだったこと、ここにあるよ。","lbl_before":"予想","lbl_after":"実際","log_avg_cap":"点数を残した{n}個の平均","privacy":"プライバシーポリシー"},"zh-Hans":{"page_title":"Breakfree","tagline":"担心、烦恼，都没什么大不了","tap_start":"点击屏幕开始","aria_menu":"菜单：手感设置","aria_log":"查看砸碎记录","hitstop":"打击停顿","shake":"画面震动","shards":"碎片数量","vol":"音量","vib":"振动","lang":"语言","reset":"恢复默认","q_start":"你一直拖着的事里，哪件3分钟内能先动手？","q_done":"今天已经做完什么了吗？","ph_start":"例：打开文件","ph_done":"例：预约了维修","aria_start":"一直拖着的事","aria_done":"已经做完的事","sub_start":"拖延的、麻烦的、想躲的，什么都行","sub_done":"写下来就能马上砸","first_guide":"写一件 → 放下手机去做 → 回来砸掉","btn_go":"去砸碎","btn_pull":"变成方块","hints_open":"从哪开始？","hints_close":"收起例子","mode_start":"写现在要做的事","mode_done":"写已经做完的事","back":"返回","fs1":"给朋友发个问候","fs2":"跟人说想改约","fs3":"为上次的事道歉","fs4":"回复拖着没回的消息","fs5":"整理书桌","fs6":"洗衣服","fs7":"预约看病","fs8":"开始写作业","del_q":"不砸，直接删掉？","del_yes":"删除","cancel":"取消","add":"＋ 再做一个（{n}/3）","del":"删除","max3":"最多3件。先砸掉一件吧。","swipe":"左右滑动切换","fear_q":"这件事，感觉有多重？","after_q":"做完之后，感觉有多重？","scale_lo":"没什么","scale_hi":"非常沉重","skip":"跳过","after_saved":"砸掉的已经保存了","put_phone":"放下手机去做吧。提前回来也可以。","slide":"做完了就滑动蓄力","aria_slider":"滑动蓄力（也可按 Enter）","did":"做完了","later":"下次吧","timer_end":"时间到。做了就滑动蓄力。","cross":"划过方块","cross_more":"从头到尾划过方块","break_btn":"用按钮砸碎","p1":"就3分钟，冲一下。","p2":"不用完美，先做再说。","p3":"千里之行，始于足下。","p4":"只做第一步，后面会跟上。","p5":"失败也没有惩罚，试试看。","p6":"不用全做完，先碰一下就好。","p7":"抓住今天的一件事就好。","p8":"能做多少就做多少，够了。","p9":"敢面对，就已经完成一半了。","p10":"3分钟比你想的长。来吧。","p11":"别想做好，开始就行。","p12":"一行动，担心就变小。","p13":"只写一行，只打一个电话。","p14":"你比这件事强大。","p15":"做得不好也没关系，试过的会留下。","p16":"没人打分，动起来就好。","p17":"深呼吸一下，开始吧。","p18":"拖得越久，砸起来越爽。","p19":"这次不躲了。","p20":"小小的开始也是开始。","p21":"3分钟后回来砸它。","p22":"开始了，就完成了一半。","r_none":"砸掉一件","r_light":"果然，没什么大不了","r_lighter":"没想象中那么严重","r_bit":"轻了一点","r_heavier":"比想象中重，但还是做到了","r_same":"跟预想的一样，没什么大不了","r_tried":"做了才知道，没什么大不了","r_still":"但还是做到了","cmp":"预计 {b} → 实际 {a}","today":"今天砸了第{n}件","first_star":"砸掉的事会变成星星。点星星随时能回看。","ok":"好","more":"再做一个","broke_at":"{when} 砸掉","done_tag":" · 已做完的事","tried":"实际 {a}","close":"关闭","again":"接着再来一次","c_title":"这个一个人砸好像太重了","c_body":"比起砸掉，先和信任的人说说吧。","c_sub":"这个应用是帮你轻松开始拖延之事的工具，不能代替心理咨询。","c_ok":"知道了","c_force":"照样变成方块","log_title":"砸碎记录","log_light":"留下分数的{n}件中，有{k}件做完后是3分以下。","log_skipped":"（没打分就砸掉的{n}件不算在内）","log_avg":"{n}件有分数的平均：预计 {b} → 实际 {a}","log_rm":"删除","log_rm_yes":"确定删除","log_clear":"删除{n}条砸碎记录","log_clear_yes":"再按一次就删除{n}条砸碎记录","log_reset":"全部重置（包括写出来的{m}件）","log_reset_yes":"再按一次就删除{n}条记录和写出来的{m}件","log_empty":"还没砸过。砸掉第一件就会留在这里。","save_fail":"没能保存到这台设备。关掉应用可能会丢失。","come_back":"没关系，准备好了再来。","now_label":"现在要做","when_q":"没关系。要不要选一下什么时候做？","w1":"吃完饭后","w2":"洗完澡后","w3":"明天早上","w_skip":"先放着","when_tag":"打算{w}做","when_ok":"好，到时候再来。","past_down":"之前{lo}到{hi}分的{n}件，做完平均{a}分。","past_up":"之前{lo}到{hi}分的{n}件，做完平均{a}分。但都做到了。","t_q":"选个时间吧","t_none":"不计时","t_min":"{n}分钟","no_timer":"不计时。做了就滑动蓄力。","timer_hint":"点时间可以更改","when_here":"打算“{w}”做的那件，在这里。","lbl_before":"预计","lbl_after":"实际","log_avg_cap":"{n}件有分数的平均","privacy":"隐私政策"},"zh-Hant":{"page_title":"Breakfree","tagline":"擔心、煩惱，都沒什麼大不了","tap_start":"點擊螢幕開始","aria_menu":"選單：手感設定","aria_log":"查看砸碎紀錄","hitstop":"打擊停頓","shake":"畫面震動","shards":"碎片數量","vol":"音量","vib":"震動","lang":"語言","reset":"恢復預設","q_start":"你一直拖著的事裡，哪件3分鐘內能先動手？","q_done":"今天已經做完什麼了嗎？","ph_start":"例：打開檔案","ph_done":"例：預約了維修","aria_start":"一直拖著的事","aria_done":"已經做完的事","sub_start":"拖延的、麻煩的、想躲的，什麼都行","sub_done":"寫下來就能馬上砸","first_guide":"寫一件 → 放下手機去做 → 回來砸掉","btn_go":"去砸碎","btn_pull":"變成方塊","hints_open":"從哪開始？","hints_close":"收起例子","mode_start":"寫現在要做的事","mode_done":"寫已經做完的事","back":"返回","fs1":"給朋友傳個問候","fs2":"跟人說想改約","fs3":"為上次的事道歉","fs4":"回覆拖著沒回的訊息","fs5":"整理書桌","fs6":"洗衣服","fs7":"預約看病","fs8":"開始寫作業","del_q":"不砸，直接刪掉？","del_yes":"刪除","cancel":"取消","add":"＋ 再做一個（{n}/3）","del":"刪除","max3":"最多3件。先砸掉一件吧。","swipe":"左右滑動切換","fear_q":"這件事，感覺有多重？","after_q":"做完之後，感覺有多重？","scale_lo":"沒什麼","scale_hi":"非常沉重","skip":"跳過","after_saved":"砸掉的已經儲存了","put_phone":"放下手機去做吧。提前回來也可以。","slide":"做完了就滑動集氣","aria_slider":"滑動集氣（也可按 Enter）","did":"做完了","later":"下次吧","timer_end":"時間到。做了就滑動集氣。","cross":"劃過方塊","cross_more":"從頭到尾劃過方塊","break_btn":"用按鈕砸碎","p1":"就3分鐘，衝一下。","p2":"不用完美，先做再說。","p3":"千里之行，始於足下。","p4":"只做第一步，後面會跟上。","p5":"失敗也沒有懲罰，試試看。","p6":"不用全做完，先碰一下就好。","p7":"抓住今天的一件事就好。","p8":"能做多少就做多少，夠了。","p9":"敢面對，就已經完成一半了。","p10":"3分鐘比你想的長。來吧。","p11":"別想做好，開始就行。","p12":"一行動，擔心就變小。","p13":"只寫一行，只打一通電話。","p14":"你比這件事強大。","p15":"做得不好也沒關係，試過的會留下。","p16":"沒人打分，動起來就好。","p17":"深呼吸一下，開始吧。","p18":"拖得越久，砸起來越爽。","p19":"這次不躲了。","p20":"小小的開始也是開始。","p21":"3分鐘後回來砸它。","p22":"開始了，就完成了一半。","r_none":"砸掉一件","r_light":"果然，沒什麼大不了","r_lighter":"沒想像中那麼嚴重","r_bit":"輕了一點","r_heavier":"比想像中重，但還是做到了","r_same":"跟預想的一樣，沒什麼大不了","r_tried":"做了才知道，沒什麼大不了","r_still":"但還是做到了","cmp":"預計 {b} → 實際 {a}","today":"今天砸了第{n}件","first_star":"砸掉的事會變成星星。點星星隨時能回看。","ok":"好","more":"再做一個","broke_at":"{when} 砸掉","done_tag":" · 已做完的事","tried":"實際 {a}","close":"關閉","again":"接著再來一次","c_title":"這個一個人砸好像太重了","c_body":"比起砸掉，先和信任的人說說吧。","c_sub":"這個 App 是幫你輕鬆開始拖延之事的工具，不能代替心理諮商。","c_ok":"知道了","c_force":"照樣變成方塊","log_title":"砸碎紀錄","log_light":"留下分數的{n}件中，有{k}件做完後是3分以下。","log_skipped":"（沒打分就砸掉的{n}件不算在內）","log_avg":"{n}件有分數的平均：預計 {b} → 實際 {a}","log_rm":"刪除","log_rm_yes":"確定刪除","log_clear":"刪除{n}筆砸碎紀錄","log_clear_yes":"再按一次就刪除{n}筆砸碎紀錄","log_reset":"全部重置（包括寫出來的{m}件）","log_reset_yes":"再按一次就刪除{n}筆紀錄和寫出來的{m}件","log_empty":"還沒砸過。砸掉第一件就會留在這裡。","save_fail":"沒能儲存到這台裝置。關掉 App 可能會遺失。","come_back":"沒關係，準備好了再來。","now_label":"現在要做","when_q":"沒關係。要不要選一下什麼時候做？","w1":"吃完飯後","w2":"洗完澡後","w3":"明天早上","w_skip":"先放著","when_tag":"打算{w}做","when_ok":"好，到時候再來。","past_down":"之前{lo}到{hi}分的{n}件，做完平均{a}分。","past_up":"之前{lo}到{hi}分的{n}件，做完平均{a}分。但都做到了。","t_q":"選個時間吧","t_none":"不計時","t_min":"{n}分鐘","no_timer":"不計時。做了就滑動集氣。","timer_hint":"點時間可以更改","when_here":"打算「{w}」做的那件，在這裡。","lbl_before":"預計","lbl_after":"實際","log_avg_cap":"{n}件有分數的平均","privacy":"隱私權政策"}};
+  const LANGS = { ko: '한국어', en: 'English', ja: '日本語', 'zh-Hans': '简体中文', 'zh-Hant': '繁體中文' };
+  const LOCALE = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', 'zh-Hans': 'zh-CN', 'zh-Hant': 'zh-TW' };
+  function pickLang() {
+    try { const s = localStorage.getItem('bf-lang'); if (s && STR[s]) return s; } catch (e) {}
+    const list = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
+    for (const raw of list) {
+      const l = String(raw).toLowerCase();
+      if (l.startsWith('ko')) return 'ko';
+      if (l.startsWith('ja')) return 'ja';
+      if (l.startsWith('zh')) return /hant|-tw|-hk|-mo/.test(l) ? 'zh-Hant' : 'zh-Hans';
+      if (l.startsWith('en')) return 'en';
+    }
+    return 'en';
+  }
+  let LANG = pickLang();
+  // 없는 키는 영어로, 영어에도 없으면 키 그대로 (예전에 저장된 한국어 응원 문구도 그대로 보인다)
+  function tr(k, v) {
+    let s = (STR[LANG] && STR[LANG][k]) ?? STR.en[k] ?? k;
+    if (v) for (const [a, b] of Object.entries(v)) s = s.split('{' + a + '}').join(b);
+    return s;
+  }
+  const pl = n => (n === 1 ? '' : 's');
+  const fmtWhen = ts => {
+    const x = new Date(ts);
+    try { return new Intl.DateTimeFormat(LOCALE[LANG], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(x); }
+    catch (e) { return `${x.getMonth() + 1}/${x.getDate()} ${String(x.getHours()).padStart(2, '0')}:${String(x.getMinutes()).padStart(2, '0')}`; }
+  };
+  function applyStatic() {
+    document.documentElement.lang = LANG;
+    document.title = tr('page_title');
+    document.querySelectorAll('[data-t]').forEach(el => { el.textContent = tr(el.dataset.t); });
+    $('gear').setAttribute('aria-label', tr('aria_menu'));
+    $('countBtn').setAttribute('aria-label', tr('aria_log'));
+    $('privacyLink').href = 'privacy/' + LANG + '.html';
+  }
+  const langSel = $('langSel');
+  langSel.innerHTML = Object.entries(LANGS).map(([k, name]) => `<option value="${k}" lang="${k}">${name}</option>`).join('');
+  langSel.value = LANG;
+  langSel.onchange = () => {
+    if (!STR[langSel.value]) return;
+    LANG = langSel.value;
+    try { localStorage.setItem('bf-lang', LANG); } catch (e) {}
+    applyStatic(); renderThemes(); render();
+  };
+  applyStatic();
+
+  // ---------- 색 테마 (2026-11-25 4개 다 넣고 MENU에서 고르기, 기본은 선라이즈) ----------
+  // 근거·출처: 프로젝트 파일 colors/색감-제안.md. 저장 키는 bf-theme (손맛 '기본값' 버튼과 따로)
+  const THEMES = {
+    sunrise: { v: { '--bg': '#07040c', '--panel': '#140a1c', '--line': '#3d2448', '--faint': '#54365e', '--muted': '#c79bb0',
+        '--cyan': '#ff9a1f', '--mag': '#ff4f9a', '--yel': '#ffe03a', '--grn': '#3dffb4', '--btn-fg': '#1a1004',
+        '--magD': '#a8245f', '--magDD': '#5e0f33', '--yelL': '#fff3a8', '--yelD': '#d1a400', '--yelDD': '#7d5a00', '--cyanDD': '#7a3d00' },
+      block: { top: '#ffe9a8', topD: '#ffc23d', hi: '#ffd2b8', body: '#ff6a2a', bodyD: '#ec5214', lo: '#a8320a', side: '#701f06', sideD: '#481303', shine: '#ffffff' },
+      field: ['#2e1a33', '#4a2c50', '#7a4a78'] },
+    neon: { v: { '--bg': '#050508', '--panel': '#0b0b1a', '--line': '#2b2d5c', '--faint': '#3b3d66', '--muted': '#8f94c4',
+        '--cyan': '#2ef2ff', '--mag': '#ff3ea5', '--yel': '#ffe94a', '--grn': '#5dff8f', '--btn-fg': '#14110a',
+        '--magD': '#a3247a', '--magDD': '#5a0f3a', '--yelL': '#fff7b0', '--yelD': '#c9a800', '--yelDD': '#7a5d00', '--cyanDD': '#0d5f66' },
+      block: { top: '#8df9ff', topD: '#2ef2ff', hi: '#e0c4ff', body: '#8a3dff', bodyD: '#7429ee', lo: '#3c0f9c', side: '#2c0b70', sideD: '#1c0650', shine: '#ffffff' },
+      field: ['#1f2145', '#34376b', '#565aa3'] },
+    candy: { v: { '--bg': '#04050c', '--panel': '#0a0d1e', '--line': '#24305e', '--faint': '#34427a', '--muted': '#93a3d6',
+        '--cyan': '#4fb4ff', '--mag': '#ff4fd8', '--yel': '#c6ff3d', '--grn': '#ffe94a', '--btn-fg': '#0d1404',
+        '--magD': '#a3248a', '--magDD': '#560f4a', '--yelL': '#ecffb0', '--yelD': '#8fc400', '--yelDD': '#4f6e00', '--cyanDD': '#0f4a7a' },
+      block: { top: '#c4e6ff', topD: '#6cc4ff', hi: '#d8c4ff', body: '#2f6bff', bodyD: '#1f52e6', lo: '#1236a8', side: '#0c2470', sideD: '#07174a', shine: '#ffffff' },
+      field: ['#1a2348', '#2c3a72', '#4a5fae'] },
+    coral: { v: { '--bg': '#06060a', '--panel': '#101018', '--line': '#2f3442', '--faint': '#454b5c', '--muted': '#a9b2c4',
+        '--cyan': '#3dffc8', '--mag': '#ff6b5e', '--yel': '#ffd84d', '--grn': '#59c8ff', '--btn-fg': '#191204',
+        '--magD': '#a8382e', '--magDD': '#5c1a14', '--yelL': '#fff0b8', '--yelD': '#c9a000', '--yelDD': '#7a5f00', '--cyanDD': '#0b6650' },
+      block: { top: '#ffd0c4', topD: '#ff9e8a', hi: '#ffe0d6', body: '#ff5e4d', bodyD: '#e84838', lo: '#a82a1e', side: '#6e1a12', sideD: '#48100b', shine: '#ffffff' },
+      field: ['#1e2430', '#323a4c', '#55627e'] }
+  };
+  // 메뉴 글자는 STR(긴 한 줄)에 넣지 않고 따로 둔다: 다른 작업과 같은 줄을 고쳐 충돌하지 않게
+  const THEME_STR = {
+    ko: { label: '색', sunrise: '선라이즈', neon: '네온', candy: '팝 캔디', coral: '코랄 민트' },
+    en: { label: 'Color', sunrise: 'Sunrise', neon: 'Neon', candy: 'Pop Candy', coral: 'Coral Mint' },
+    ja: { label: 'カラー', sunrise: 'サンライズ', neon: 'ネオン', candy: 'ポップキャンディ', coral: 'コーラルミント' },
+    'zh-Hans': { label: '颜色', sunrise: '日出', neon: '霓虹', candy: '糖果', coral: '珊瑚薄荷' },
+    'zh-Hant': { label: '顏色', sunrise: '日出', neon: '霓虹', candy: '糖果', coral: '珊瑚薄荷' }
+  };
+  const trTheme = k => (THEME_STR[LANG] || THEME_STR.en)[k];
+  let themeKey = 'sunrise';
+  try { const s = localStorage.getItem('bf-theme'); if (s && THEMES[s]) themeKey = s; } catch (e) {}
+  let TH = THEMES[themeKey];
+  const hexA = (hex, a) => 'rgba(' + [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(',') + ',' + a + ')';
+  function setThemeCss() {
+    const root = document.documentElement;
+    for (const n in TH.v) root.style.setProperty(n, TH.v[n]);
+  }
+  setThemeCss();
+  function renderThemes() {
+    $('themeLbl').textContent = trTheme('label');
+    $('themes').setAttribute('aria-labelledby', 'themeLbl');
+    $('themes').innerHTML = Object.keys(THEMES).map(k => {
+      const v = THEMES[k].v;
+      return `<button type="button" data-theme-key="${k}" aria-pressed="${k === themeKey}">` +
+        `<span class="sw" style="background:linear-gradient(90deg,${v['--yel']} 0 33%,${v['--mag']} 33% 66%,${v['--cyan']} 66%)"></span>` +
+        `<span>${esc(trTheme(k))}</span></button>`;
+    }).join('');
+  }
+  $('themes').addEventListener('click', e => {
+    const b = e.target.closest('button[data-theme-key]'); if (!b || !THEMES[b.dataset.themeKey]) return;
+    themeKey = b.dataset.themeKey; TH = THEMES[themeKey];
+    try { localStorage.setItem('bf-theme', themeKey); } catch (err) {}
+    setThemeCss();
+    Object.assign(COL, TH.block); NEON.splice(0, NEON.length, ...themeNeon()); FIELD_COL.splice(0, FIELD_COL.length, ...TH.field);
+    renderThemes();
+  });
+  const themeNeon = () => [TH.v['--yel'], TH.v['--cyan'], '#ffffff', TH.v['--mag']];
+  renderThemes();
+
+  // ---------- 손맛 설정 ----------
+  const DEFAULTS = { hitstop: 120, shake: 16, shards: 60, vol: 0.8, vib: 1 };
+  const S = { ...DEFAULTS };
+  try { Object.assign(S, JSON.parse(localStorage.getItem('bf-shatter') || '{}')); } catch (e) {}
+  const saveS = () => { try { localStorage.setItem('bf-shatter', JSON.stringify(S)); } catch (e) {} };
+  const fmt = { hitstop: v => v + 'ms', shake: v => v, shards: v => v, vol: v => Math.round(v * 100) + '%' };
+  // 기기에서 '동작 줄이기'를 켠 사람: 화면 흔들림·섬광을 끈다
+  const RM = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+  function bindPanel() {
+    for (const k of Object.keys(DEFAULTS)) {
+      const el = $(k), out = $('v_' + k);
+      if (el.type === 'checkbox') { el.checked = !!S[k]; el.onchange = () => { S[k] = el.checked ? 1 : 0; saveS(); }; continue; }
+      el.value = S[k]; out.textContent = fmt[k](S[k]);
+      el.oninput = () => { S[k] = parseFloat(el.value); out.textContent = fmt[k](S[k]);
+        if (k === 'vol' && master) master.gain.value = S.vol; saveS(); };
+    }
+  }
+  bindPanel();
+  $('reset').onclick = () => { Object.assign(S, DEFAULTS); saveS(); bindPanel(); if (master) master.gain.value = S.vol; };
+  $('gear').onclick = () => { $('panel').hidden = !$('panel').hidden; };
+
+  // ---------- 저장 데이터 (이 브라우저에만) ----------
+  const KEY = 'bf-proto-v1';
+  // items: 꺼내 둔 일 / broken: 부순 기록 / run: 진행 중인 단계(앱이 다시 열려도 이어가기)
+  let data = { items: [], broken: [], run: null };
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (d && Array.isArray(d.items) && Array.isArray(d.broken)) data = { run: null, ...d };
+  } catch (e) {}
+  // 예전 버전이 처음 열 때 넣던 예시는 지운다 (예시는 입력칸 힌트로만)
+  data.items = data.items.filter(it => it.text !== '치과 예약 전화하기 (예시)');
+  let saveWarned = false;
+  const persist = () => {
+    try { localStorage.setItem(KEY, JSON.stringify(data)); return true; }
+    catch (e) { if (!saveWarned) { saveWarned = true; setTimeout(() => toast(tr('save_fail')), 300); } return false; }
+  };
+  persist();
+
+  // 응원 문구 (짧은 반말). 결과를 장담하는 문구·재촉하는 문구는 뺐다 (2026-11-25 , 검토정리 2-1·2-3)
+  const PHRASE_KEYS = Array.from({ length: 22 }, (_, i) => 'p' + (i + 1));
+  // 시간은 고를 수 있다 (기본 3분, 1·3·10분·시간 없이). 선택권이 동기를 올린다: Patall 등 2008. 0 = 시간 없이
+  const TIMER_OPTS = [1, 3, 10, 0];
+  let timerMin = 3;
+  try { const v = localStorage.getItem('bf-timer'); if (v !== null && TIMER_OPTS.includes(+v)) timerMin = +v; } catch (e) {}
+  const THREE_MIN_KEYS = { p1: 1, p10: 1, p21: 1 }; // '3분'이 들어간 응원 문구는 3분일 때만
+  const pickPhrase = () => { const ks = PHRASE_KEYS.filter(k => timerMin === 3 || !THREE_MIN_KEYS[k]); return ks[Math.random() * ks.length | 0]; };
+  const startTimer = () => { timerEnd = timerMin ? Date.now() + timerMin * 60000 : -1; timerDone = false; };
+  // 아주 무거운 말이 적혔을 때만 숨은 안내를 띄운다. 화면 언어와 다른 말로 적을 수도 있어서 다섯 언어를 전부 본다
+  // ⚠ 원어민·전문가 확인 전 초안이다 (2026-11-25 점검 반영). 예문 시험: node tests/crisis.test.js
+  // 원칙: 놓치는 것보다 조금 더 걸리는 쪽. 잘못 걸려도 '그냥 큐브로 만들기'로 계속할 수 있다.
+  // 먼저 BENIGN(평범한 말 속에 우연히 들어간 글자, 흔한 과장)을 지우고 나서 CRISIS를 본다
+  const BENIGN = new RegExp([
+    '자살\\s*골',                                   // ko: 축구 자살골
+    '年[轻輕]', '[减減][轻輕]', '看[轻輕]', '[轻輕]生活', // zh: 年轻生活·减轻生活压力·看轻生命·轻生活 속의 '轻生'
+    '想死(?:你|我了|了你)',                          // zh: 보고 싶어 죽겠어
+    '自殺点', '自殺行為',                            // ja: 자책골, '자살 행위'(비유)
+    '\\bcut(?:ting)?\\s+my\\s?self\\s+(?:some|a)\\s+(?:slack|break)\\b', // en
+  ].join('|'), 'giu');
+  const CRISIS = new RegExp([
+    // ko
+    '죽고\\s*싶', '자살', '자해', '죽어\\s*버(?:리|릴|렸으면|려야)', '죽는\\s*게\\s*(?:낫|나을|나아)', '죽었으면\\s*좋겠',
+    '살기\\s*싫', '살고\\s*싶지\\s*않', '그만\\s*살고\\s*싶', '살\\s*이유(?:가|도)?\\s*없',
+    '사라지고\\s*싶', '없어지고\\s*싶', '(?:스스로\\s*)?목숨\\s*을?\\s*끊', '극단적\\s*(인\\s*)?선택', '뛰어내리고\\s*싶',
+    '목\\s*을?\\s*매(?:달)?(?:고\\s*싶|아?\\s*죽)', '(?:삶|인생|모든\\s*걸|모든\\s*것을?)\\s*끝내고\\s*싶', '유서\\s*(?:를\\s*)?(?:쓰|써|남기)',
+    // en
+    '\\bsuicid(?:e|al)\\b', '\\bkill(?:ing)?\\s+my\\s?self\\b', '\\bkms\\b', '\\b(?:want|wanna|wanted)\\s+(?:to\\s+)?die\\b',
+    '\\bwish\\s+i\\s+(?:was|were)\\s+dead\\b', '\\b(?:better\\s+off|rather\\s+be)\\s+dead\\b', '\\bend(?:ing)?\\s+(?:my\\s+life|it\\s+all)\\b',
+    '\\btak(?:e|ing)\\s+my\\s+(?:own\\s+)?life\\b', '\\bhang(?:ing)?\\s+my\\s?self\\b',
+    '\\bself[\\s-]?harm', '\\b(?:hurt|hurting|cut|cutting)\\s+my\\s?self\\b',
+    "\\b(?:don['’]?t|do\\s+not)\\s+(?:want\\s+to|wanna)\\s+(?:live|be\\s+alive|exist)\\b", '\\bno\\s+reason\\s+to\\s+live\\b',
+    '\\b(?:not\\s+worth|tired\\s+of)\\s+living\\b', '\\bunalive\\b',
+    // ja
+    '死にたい', 'しにたい', 'タヒにたい', '死んでしまいたい', '死のう(?:か|と)', '自殺', '自傷', 'リスカ', 'リストカット',
+    '消えたい', '消えてしまいたい', 'いなくなりたい', '生きたくない', '生きてい?たくない', '生きる意味(?:が|も)?ない',
+    '命を[絶断]', '首を?吊', '飛び降りたい', '希死念慮',
+    // zh-Hans + zh-Hant
+    '想死', '不想活', '活不下去', '活[着著][没沒]意思', '活[够夠]了', '自[杀殺]', '自[残殘]', '自尽', '自盡', '[轻輕]生',
+    '[结結]束(?:自己的)?生命', '了[结結]自己', '[寻尋]死', '割腕', '跳[楼樓]', '上吊', '想消失',
+  ].join('|'), 'iu');
+  // 전각 글자(ｋｉｌｌ)·반각 가타카나도 보통 글자로 바꿔서 검사
+  const isCrisis = s => { try { s = s.normalize('NFKC'); } catch (e) {} return CRISIS.test(s.replace(BENIGN, ' ')); };
+
+  // ---------- 캔버스 ----------
+  const cv = $('c'), ctx = cv.getContext('2d');
+  let W = 0, H = 0, dpr = 1;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  }
+  window.addEventListener('resize', () => { resize(); stroke = null; down = null; }); resize();
+  const cubeSize = () => Math.max(50, Math.min(130, W * 0.16, H * 0.11));
+  // 상태마다 블록이 가려는 크기·높이 [배율, 세로 위치]
+  const cubeTarget = () => { const big = state === 'timer' || state === 'armed' || state === 'frozen';
+    return [big ? 1.2 : state === 'fear' ? 0.85 : state === 'title' ? 1.1 : 1, big ? 0.47 : state === 'fear' ? 0.33 : state === 'title' ? 0.56 : 0.40]; };
+  // 긴 할 일이 아래 버튼과 겹치지 않게: 자리가 모자라면 글자를 줄이고, 그래도 넘치면 넘친 줄만 가린다
+  function fitLabel() {
+    const el = labelEl; el.style.fontSize = ''; el.classList.remove('clip');
+    const first = $('bottom').firstElementChild;
+    if (!el.textContent || !first) return;
+    const [ts, tc] = cubeTarget();
+    const room = first.getBoundingClientRect().top - 12 - (H * tc + cubeSize() * ts * 1.5);
+    let fs = parseFloat(getComputedStyle(el).fontSize) || 20;
+    while (el.scrollHeight > room && fs > 13) { fs -= 1; el.style.fontSize = fs + 'px'; }
+    if (el.scrollHeight > room) { // 아주 작은 화면: 들어가는 줄까지만 보이고 끝에 … (전체 글은 고르는 화면에서 보인다)
+      const t = el.querySelector('.ltxt'), lh = fs * 1.4;
+      t.style.webkitLineClamp = Math.max(1, Math.floor((room - (el.scrollHeight - t.offsetHeight)) / lh)); el.classList.add('clip');
+    }
+  }
+  // 키보드가 올라오면 실제로 보이는 높이가 줄어든다 (브라우저마다 방식이 달라 visualViewport로 잰다)
+  function fitViewport() {
+    const vv = window.visualViewport, h = vv ? vv.height : window.innerHeight;
+    document.documentElement.style.setProperty('--vvh', h + 'px');
+    document.documentElement.classList.toggle('short', h < 560);
+  }
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fitViewport);
+  window.addEventListener('resize', () => { fitViewport(); try { fitLabel(); } catch (e) {} });
+  fitViewport();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { try { fitLabel(); } catch (e) {} });
+
+  // ---------- 오디오 (전부 코드로 합성) ----------
+  let AC = null, master = null, noiseBuf = null;
+  function ensureAudio() {
+    try {
+      if (!AC) {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        const comp = AC.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 6;
+        master = AC.createGain(); master.gain.value = S.vol; master.connect(comp); comp.connect(AC.destination);
+        noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+        const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (AC.state === 'suspended') AC.resume();
+    } catch (e) { AC = null; }
+  }
+  function env(g, t0, atk, peak, dec) {
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t0 + atk);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + atk + dec);
+  }
+  function out(node, pan) {
+    if (pan && AC.createStereoPanner) { const p = AC.createStereoPanner(); p.pan.value = pan; node.connect(p); p.connect(master); }
+    else node.connect(master);
+  }
+  function noiseHit(t, type, freq, q, peak, dec, sweepTo) {
+    const n = AC.createBufferSource(); n.buffer = noiseBuf;
+    const f = AC.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+    if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t + dec);
+    const g = AC.createGain(); env(g, t, 0.001, peak, dec);
+    n.connect(f); f.connect(g); out(g); n.start(t, Math.random() * 0.5); n.stop(t + dec + 0.05);
+  }
+  function tone(t, type, f0, f1, peak, dec, pan) {
+    const o = AC.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t);
+    if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dec);
+    const g = AC.createGain(); env(g, t, 0.002, peak, dec);
+    o.connect(g); out(g, pan); o.start(t); o.stop(t + dec + 0.05);
+  }
+  // 8비트 타격: 짧은 잡음 + 뚝 떨어지는 사각파
+  function sndImpact() {
+    if (!AC) return; const t = AC.currentTime;
+    noiseHit(t, 'highpass', 1800, 0.7, 0.5, 0.07);
+    tone(t, 'square', 220, 55, 0.2, 0.16);
+  }
+  // 8비트 폭발: 잡음이 낮아지며 사라지고, 사각파 음이 계단처럼 내려간다
+  function sndShatter() {
+    if (!AC) return; const t = AC.currentTime;
+    noiseHit(t, 'lowpass', 2600, 0.6, 0.6, 0.5, 300);
+    noiseHit(t, 'bandpass', 5200, 0.8, 0.28, 0.22);
+    tone(t, 'square', 440, 40, 0.16, 0.45);
+    [988, 784, 659, 523, 392, 330].forEach((f, i) => chip(t + 0.03 + i * 0.045, f, 0.045, 0.06));
+  }
+  // 칩튠(사각파) 효과음
+  function chip(t, f, d, g) {
+    const o = AC.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(f, t);
+    const gn = AC.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.linearRampToValueAtTime(g, t + 0.004);
+    gn.gain.setValueAtTime(g, t + d - 0.01); gn.gain.linearRampToValueAtTime(0.0001, t + d);
+    o.connect(gn); out(gn); o.start(t); o.stop(t + d + 0.02);
+  }
+  const arp = (notes, step, g) => { if (!AC) return; const t = AC.currentTime; notes.forEach((f, i) => { if (f > 1) chip(t + i * step, f, step, g); }); }; // 0 = 쉼표
+  function sndCoin() { arp([988, 1319], 0.07, 0.07); }
+  function sndArm() { arp([523, 784], 0.06, 0.07); }
+  function sndDing() { arp([784, 0, 784, 1047], 0.09, 0.06); }
+  function sndStar() { arp([1047, 1319, 1568, 2093], 0.055, 0.05); }
+  function sndCombo() { arp([784, 988, 1175, 1568, 1976], 0.045, 0.05); }
+  function vibrate(p) { if (!S.vib) return; try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+
+  // ---------- 도트 블록 ----------
+  // 정면 BN×BN칸 + 윗면·옆면 DP칸짜리 도트 상자. 회전하지 않고 칸 단위로 위아래로만 떠 있다 (80년대 오락실 느낌)
+  const BN = 8, DP = 3;
+  const COL = Object.assign({}, TH.block); // 색은 위의 THEMES
+  function blockCells(c, s) {
+    const u = Math.max(3, Math.round(s * 2.3 / (BN + DP)));
+    const x0 = Math.round(c[0] - (BN + DP) * u / 2), y0 = Math.round(c[1] - (BN + DP) * u / 2) + DP * u;
+    const cells = [];
+    for (let k = DP; k >= 1; k--) {
+      for (let i = 0; i < BN; i++) cells.push({ x: x0 + (i + k) * u, y: y0 - k * u, color: (i + k) % 2 ? COL.top : COL.topD, d: -1 });           // 윗면
+      for (let j = 1; j < BN; j++) cells.push({ x: x0 + (BN - 1 + k) * u, y: y0 + (j - k) * u, color: (j + k) % 2 ? COL.side : COL.sideD, d: -1 }); // 옆면
+    }
+    for (let j = 0; j < BN; j++) for (let i = 0; i < BN; i++) { // 정면: 위·왼쪽 밝게, 아래·오른쪽 어둡게
+      const color = (j === 0 || i === 0) ? COL.hi : (j === BN - 1 || i === BN - 1) ? COL.lo : ((i + j) % 2 ? COL.body : COL.bodyD);
+      cells.push({ x: x0 + i * u, y: y0 + j * u, color, d: i + j });
+    }
+    const hull = [[x0, y0], [x0 + DP * u, y0 - DP * u], [x0 + (BN + DP) * u, y0 - DP * u], [x0 + (BN + DP) * u, y0 + (BN - DP) * u],
+      [x0 + BN * u, y0 + BN * u], [x0, y0 + BN * u]];
+    return { cells, u, hull, center: c };
+  }
+  // white: 맞는 순간 전체가 하얗게 / edge: 테두리 색 / shine: 정면을 대각선으로 지나가는 반짝임 줄 번호
+  function drawBlock(b, white, edge, shine) {
+    for (const q of b.cells) {
+      ctx.fillStyle = white ? '#ffffff' : (q.d === shine ? COL.shine : q.color);
+      ctx.fillRect(q.x, q.y, b.u, b.u);
+    }
+    ctx.save();
+    ctx.shadowColor = edge; ctx.shadowBlur = 14; ctx.strokeStyle = edge; ctx.lineWidth = 2; ctx.lineJoin = 'miter';
+    ctx.beginPath(); b.hull.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------- 도형 계산 ----------
+  function inPoly(p, poly) {
+    let ins = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[i], b = poly[j];
+      if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) ins = !ins;
+    }
+    return ins;
+  }
+  function segT(p, q, a, b) {
+    const r = [q[0] - p[0], q[1] - p[1]], s = [b[0] - a[0], b[1] - a[1]];
+    const den = r[0] * s[1] - r[1] * s[0]; if (Math.abs(den) < 1e-9) return null;
+    const ap = [a[0] - p[0], a[1] - p[1]];
+    const t = (ap[0] * s[1] - ap[1] * s[0]) / den, u = (ap[0] * r[1] - ap[1] * r[0]) / den;
+    return (t >= 0 && t <= 1 && u >= 0 && u <= 1) ? t : null;
+  }
+
+  // ---------- 상태 ----------
+  // input → home → fear → timer → armed → frozen → broken(여기서 완료 저장) → after → result → home|input
+  let state = 'title';
+  let cur = 0, spawnT = nowS(), timerEnd = 0, timerDone = false, phrase = '', confirmDel = false;
+  let stateT = nowS(), gameT = 0, lastNow = nowS();
+  let cube = null, frozen = null, cut = null, shakeT = -9, flashT = -9;
+  let shards = [], sparks = [], rings = [], trail = [];
+  let stroke = null, down = null, pendingText = '', lastResult = null, starAnim = null, pendingRec = null, confirmKey = '';
+  let inputMode = 'start', showHints = false, prefill = '';
+  // '뭐부터 하지?'를 누른 사람에게만 보이는 예시. 실제 일상에서 미루는 일 (2026-11-25 안부·약속·사과 같은 사람 관련 일도 넣음)
+  const FIRST_STEPS = () => [1, 2, 3, 4, 5, 6, 7, 8].map(i => tr('fs' + i));
+  let scaleCur = 1, cyCur = 0.4;
+  const labelEl = $('label'), numEl = $('num');
+
+  // 이어가기: 타이머·장전 중이었거나, 부쉈는데 실제 점수를 아직 안 남겼으면 그 자리로 돌아간다
+  (function restore() {
+    const r = data.run; if (!r) return;
+    if (r.phase === 'after') {
+      const rec = data.broken.find(x => x.id === r.recId);
+      if (rec) { pendingRec = rec; state = 'after'; return; }
+    } else {
+      const i = data.items.findIndex(x => x.id === r.itemId);
+      if (i >= 0) { cur = i; timerEnd = r.timerEnd || 0; timerDone = false; phrase = r.phrase || ''; state = r.phase === 'armed' ? 'armed' : 'timer'; return; }
+    }
+    data.run = null; persist();
+  })();
+  function setRun(r) { data.run = r; persist(); }
+
+  // 뒤로가기(안드로이드 브라우저): 열린 창 닫기 → 진행 단계 그만두기 → 홈
+  let histPushed = false;
+  const BASE = { home: 1, input: 1, title: 1 };
+  function ensureHist() { if (!histPushed) { try { history.pushState({ bf: 1 }, ''); histPushed = true; } catch (e) {} } }
+  window.addEventListener('popstate', () => {
+    histPushed = false;
+    if (!$('modal').hidden) closeModal();
+    else if (state === 'fear' || state === 'timer' || state === 'armed') { setRun(null); go('home'); toast(tr('come_back')); }
+    else if (state === 'input' && data.items.length) go('home');
+    if (!BASE[state] || !$('modal').hidden) ensureHist();
+  });
+
+  function go(s) { state = s; stateT = nowS(); if (s !== 'home') confirmDel = false; if (!BASE[s]) ensureHist(); render(); }
+
+  // 전·후 점수는 같은 질문, 같은 양끝으로 묻는다 (그래야 "예상 → 실제" 비교가 성립한다)
+  function chipsHTML(q, kind) {
+    const lo = tr('scale_lo'), hi = tr('scale_hi');
+    return `<div class="q">${q}</div>
+      <div class="chips">${[1,2,3,4,5,6,7,8,9,10].map(n => `<button class="chip" data-act="${kind}" data-n="${n}">${n}</button>`).join('')}</div>
+      <div class="scale"><span>1 ${lo}</span><span>10 ${hi}</span></div>
+      <button class="link" data-act="${kind}" data-n="">${tr('skip')}</button>`;
+  }
+
+  // 결과 한 줄: 점수가 실제로 내려갔을 때만 "별거 아니었다". 그래야 그 말을 믿을 수 있다
+  // 예상 대 실제 숫자 블록 (화면 낭독기는 한 문장으로 읽는다)
+  const vsHTML = (b, a, label) => `<div class="vs" role="img" aria-label="${esc(label || tr('cmp', { b, a }))}"><div><span>${tr('lbl_before')}</span><b>${b}</b></div><i aria-hidden="true">&gt;</i><div class="a"><span>${tr('lbl_after')}</span><b>${a}</b></div></div>`;
+  function resultHead(b, a) {
+    if (!a) return tr('r_none');
+    if (b && a < b) return a <= 3 ? tr('r_light') : (b - a >= 2 ? tr('r_lighter') : tr('r_bit'));
+    if (b && a > b) return tr('r_heavier');
+    if (b && a === b && a <= 3) return tr('r_same');
+    if (!b && a <= 3) return tr('r_tried');
+    return tr('r_still');
+  }
+
+  // 과거의 나: 예상 점수가 ±1인 내 기록이 2개 이상이면, 해 보니 몇 점이었는지 평균을 그대로 보여 준다.
+  // 내려간 것만 골라 보여 주지 않는다 (올라갔으면 올라간 대로). 근거: Wilson & Gilbert 2005, Bandura 1977
+  function pastLine(it) {
+    if (!it || !it.before) return '';
+    const lo = Math.max(1, it.before - 1), hi = Math.min(10, it.before + 1);
+    const rs = data.broken.filter(r => r.before && r.after && r.before >= lo && r.before <= hi);
+    if (rs.length < 2) return '';
+    const avg = k => rs.reduce((a, r) => a + r[k], 0) / rs.length;
+    const fmt = v => (Math.round(v * 10) / 10).toString();
+    return tr(avg('after') < avg('before') ? 'past_down' : 'past_up', { lo, hi, n: rs.length, a: fmt(avg('after')) });
+  }
+
+  function render() {
+    const top = $('top'), mid = $('mid'), bot = $('bottom');
+    top.innerHTML = ''; mid.innerHTML = ''; bot.innerHTML = '';
+    mid.classList.toggle('tall', state === 'input' && showHints && inputMode !== 'done');
+    mid.classList.toggle('inp', state === 'input');
+    const n = data.items.length, it = data.items[cur];
+    // 타이머 중에는 '지금 할 것'을 붙여 크게 (구체적으로 떠올리면 덜 미룬다: McCrea 등 2008)
+    // 홈에서는 '언제 할래?'에서 고른 때를 작게 (실행 의도: Gollwitzer & Sheeran 2006)
+    labelEl.classList.toggle('now', state === 'timer');
+    labelEl.innerHTML = !it ? '' : state === 'timer' ? `<small class="nowtag">${tr('now_label')}</small><span class="ltxt">${esc(it.text)}</span>`
+      : `<span class="ltxt">${esc(it.text)}</span>` + (state === 'home' && it.when ? `<small class="whentag">${esc(tr('when_tag', { w: tr(it.when) }))}</small>` : '');
+    const pad2 = v => String(v).padStart(2, '0');
+    const stage = `<div class="stage">STAGE ${pad2(data.broken.length + 1)}</div>`;
+    switch (state) {
+      case 'title':
+        top.innerHTML = `<div class="logo" style="margin-top:7vh">BREAK<br><span>FREE</span></div>`;
+        bot.innerHTML = `<div class="tag">${tr('tagline')}</div>
+          <button class="start blink" data-act="start">PRESS START</button>
+          <div class="sub">${tr('tap_start')}</div>`;
+        break;
+      case 'broken':
+        mid.innerHTML = `<div class="banner">CLEAR!</div>`;
+        break;
+      case 'input': {
+        const first = !n && !data.broken.length;
+        // 두 입구: 지금 시작할 일 / 이미 해낸 일 (이미 한 일은 점수·타이머 없이 바로 부순다)
+        const done = inputMode === 'done';
+        const hints = !done && showHints ? `<div class="hints">${FIRST_STEPS().map(t => `<button class="link hint" type="button" data-act="hint">${esc(t)}</button>`).join('')}</div>` : '';
+        mid.innerHTML = `<form class="inp" id="inForm">
+            <div class="q">${tr(done ? 'q_done' : 'q_start')}</div>
+            <input id="inText" maxlength="60" autocomplete="off" enterkeyhint="done" placeholder="${esc(tr(done ? 'ph_done' : 'ph_start'))}" aria-label="${esc(tr(done ? 'aria_done' : 'aria_start'))}">
+            <div class="sub">${tr(done ? 'sub_done' : 'sub_start')}</div>
+            ${first && !done && !showHints ? `<div class="sub guide">${tr('first_guide')}</div>` : ''}
+            ${hints}
+            <button class="primary" type="submit">${tr(done ? 'btn_go' : 'btn_pull')}</button>
+            <div class="links">
+              ${done ? '' : `<button class="link" type="button" data-act="toggleHints">${tr(showHints ? 'hints_close' : 'hints_open')}</button>`}
+              <button class="link" type="button" data-act="toggleMode">${tr(done ? 'mode_start' : 'mode_done')}</button>
+              ${n ? `<button class="link" type="button" data-act="cancelInput">${tr('back')}</button>` : ''}
+            </div>
+          </form>`;
+        setTimeout(() => { try { const el = $('inText'); if (prefill) { el.value = prefill; prefill = ''; } el.focus(); } catch (e) {} }, 60);
+        break;
+      }
+      case 'home':
+        top.innerHTML = stage;
+        bot.innerHTML = confirmDel
+          ? `<div class="q">${tr('del_q')}</div>
+             <div class="links"><button class="link" data-act="delYes" style="color:var(--fg)">${tr('del_yes')}</button><button class="link" data-act="delNo">${tr('cancel')}</button></div>`
+          : `${n > 1 ? `<div class="dots">${data.items.map((_, i) => `<i class="${i === cur ? 'on' : ''}"></i>`).join('')}</div>` : ''}
+             <button class="primary" data-act="go">${tr('btn_go')}</button>
+             <div class="links">
+               <button class="link" data-act="add" ${n >= 3 ? 'disabled' : ''}>${tr('add', { n })}</button>
+               <button class="link" data-act="addDone">${tr('mode_done')}</button>
+               <button class="link" data-act="del">${tr('del')}</button>
+             </div>
+             ${n >= 3 ? `<div class="sub">${tr('max3')}</div>` : (n > 1 ? `<div class="sub">${tr('swipe')}</div>` : '')}`;
+        break;
+      case 'fear':
+        top.innerHTML = stage;
+        bot.innerHTML = chipsHTML(tr('fear_q'), 'fear');
+        break;
+      case 'timer':
+        top.innerHTML = `<div class="phrase">${esc(pastLine(it) || tr(phrase))}</div><button class="clock${timerEnd < 0 ? ' done' : ''}" id="clock" data-act="timerPick">${timerEnd < 0 ? tr('no_timer') : ''}</button>
+          <div class="sub">${tr('put_phone')}<br>${tr('timer_hint')}</div>`;
+        bot.innerHTML = `<div class="slide" id="slide"><div class="fill" id="fill"></div><span>${tr('slide')}</span><div class="knob" id="knob" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="${esc(tr('aria_slider'))}">&gt;&gt;</div></div>
+          <div class="links"><button class="link" data-act="armBtn">${tr('did')}</button><button class="link" data-act="later">${tr('later')}</button></div>`;
+        bindSlider();
+        break;
+      case 'armed':
+        top.innerHTML = `<div class="banner blink">READY?</div>`;
+        bot.innerHTML = `<div class="q">${tr('cross')}</div>
+          <button class="link" data-act="breakBtn">${tr('break_btn')}</button>`;
+        break;
+      case 'after':
+        bot.innerHTML = `<div class="sub">${tr('after_saved')}</div>` + chipsHTML(tr('after_q'), 'after');
+        break;
+      case 'result': {
+        const r = lastResult;
+        const head = resultHead(r && r.before, r && r.after);
+        const cmp = r && r.before && r.after ? vsHTML(r.before, r.after) : '';
+        const combo = r && r.combo >= 2 ? `<div class="combo">COMBO x${r.combo}</div>` : '';
+        mid.innerHTML = `<div class="stage">STAGE ${pad2(data.broken.length)} CLEAR</div>${combo}<div class="big">${head}</div>${cmp}${r && r.combo >= 2 ? `<div class="sub">${tr('today', { n: r.combo })}</div>` : ''}
+          ${data.broken.length === 1 ? `<div class="sub">${tr('first_star')}</div>` : ''}`;
+        bot.innerHTML = `<button class="primary" data-act="resultDone">${tr('ok')}</button>
+          ${n < 3 ? `<button class="link" data-act="resultMore">${tr('more')}</button>` : ''}`;
+        if (combo) setTimeout(sndCombo, 150);
+        break;
+      }
+    }
+    fitLabel();
+  }
+
+  function bindSlider() {
+    const slide = $('slide'), knob = $('knob'), fill = $('fill');
+    let pid = null, x0 = 0, x = 0;
+    const max = () => slide.clientWidth - 58;
+    const back = () => {
+      x = 0; knob.style.transition = 'left .2s'; fill.style.transition = 'width .2s';
+      knob.style.left = '4px'; fill.style.width = '0'; knob.setAttribute('aria-valuenow', '0');
+      setTimeout(() => { knob.style.transition = ''; fill.style.transition = ''; }, 220);
+    };
+    knob.addEventListener('pointerdown', e => {
+      if (pid !== null) return; // 한 번에 손가락 하나만
+      pid = e.pointerId; x0 = e.clientX - x; ensureAudio();
+      try { knob.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault();
+    });
+    knob.addEventListener('pointermove', e => {
+      if (e.pointerId !== pid) return;
+      x = Math.max(0, Math.min(max(), e.clientX - x0));
+      knob.style.left = (4 + x) + 'px'; fill.style.width = (x + 28) + 'px';
+      knob.setAttribute('aria-valuenow', String(Math.round(x / Math.max(1, max()) * 100)));
+    });
+    knob.addEventListener('pointerup', e => {
+      if (e.pointerId !== pid) return; pid = null;
+      if (x >= max() * 0.85) { arm(); return; }
+      back();
+    });
+    // 취소된 터치(전화가 오거나 화면이 돌아감)는 성공으로 치지 않고 원위치
+    knob.addEventListener('pointercancel', e => { if (e.pointerId !== pid) return; pid = null; back(); });
+    knob.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'End') { e.preventDefault(); ensureAudio(); arm(); }
+    });
+  }
+
+  function arm() {
+    const it = data.items[cur];
+    if (it) setRun({ phase: 'armed', itemId: it.id, timerEnd, phrase });
+    go('armed'); sndArm(); vibrate(20);
+  }
+
+  function toast(msg, ms) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('on'), ms || 2200);
+  }
+
+  function addItem(text, done) {
+    const it = { id: Date.now(), text, at: Date.now(), before: null };
+    if (done) it.done = true;
+    data.items.push(it);
+    persist(); cur = data.items.length - 1; spawnT = nowS();
+    if (done) { inputMode = 'start'; setRun({ phase: 'armed', itemId: it.id, timerEnd: 0, phrase: '' }); go('armed'); sndArm(); return; }
+    go('home');
+  }
+
+  // 별을 누르면 그 기록이 열린다 (나중에 다시 볼 이유). '이어서 하나 더'로 같은 일을 다시 꺼낼 수 있다
+  let starRec = null;
+  function openStar(r) {
+    starRec = r;
+    const when = fmtWhen(r.at);
+    const sc = r.before && r.after ? `<p class="cmp">${tr('cmp', { b: `<b>${r.before}</b>`, a: `<b>${r.after}</b>` })}</p>`
+      : r.after ? `<p class="cmp">${tr('tried', { a: `<b>${r.after}</b>` })}</p>` : '';
+    openModal(`<h2 id="mTitle">${esc(r.text)}</h2>
+      <p class="sub">${esc(tr('broke_at', { when }))}${r.done ? esc(tr('done_tag')) : ''}</p>${sc}
+      <div class="row"><button class="primary" data-act="closeModal" data-autofocus>${tr('close')}</button>
+      ${data.items.length < 3 ? `<button class="link" data-act="again">${tr('again')}</button>` : ''}</div>`);
+  }
+  function starAt(p) {
+    let best = null, bd = 24;
+    for (const r of data.broken) {
+      if (starAnim && starAnim.rec === r && !starAnim.counted) continue;
+      const d = Math.hypot(r.x * W - p[0], r.y * H - p[1]);
+      if (d < bd) { bd = d; best = r; }
+    }
+    return best;
+  }
+
+  // ---------- 창(모달): 열면 안으로 초점, 닫으면 원래 버튼으로 ----------
+  let modalReturn = null;
+  function openModal(html, focusSel) {
+    if ($('modal').hidden) modalReturn = document.activeElement;
+    $('modal').innerHTML = `<div class="card" role="dialog" aria-modal="true" aria-labelledby="mTitle">${html}</div>`;
+    $('modal').hidden = false; ensureHist();
+    const f = (focusSel && $('modal').querySelector(focusSel)) || $('modal').querySelector('[data-autofocus]') || $('modal').querySelector('button, a');
+    // 포커스를 주되 창을 그 버튼까지 끌어내리지 않는다 (기록 창은 맨 위 요약부터 보여야 한다)
+    try { f && f.focus({ preventScroll: true }); } catch (e) {}
+    const card = $('modal').firstElementChild;
+    if (focusSel && f && f.scrollIntoView) { try { f.scrollIntoView({ block: 'nearest' }); } catch (e) {} } else card.scrollTop = 0;
+  }
+  function closeModal() {
+    $('modal').hidden = true; $('modal').innerHTML = ''; confirmKey = '';
+    try { if (modalReturn && document.contains(modalReturn)) modalReturn.focus(); } catch (e) {}
+    modalReturn = null;
+  }
+  document.addEventListener('keydown', e => {
+    if ($('modal').hidden) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
+    if (e.key !== 'Tab') return;
+    const fs = [...$('modal').querySelectorAll('button, a[href]')]; if (!fs.length) return;
+    const i = fs.indexOf(document.activeElement);
+    if (e.shiftKey && i <= 0) { e.preventDefault(); fs[fs.length - 1].focus(); }
+    else if (!e.shiftKey && (i === fs.length - 1 || i < 0)) { e.preventDefault(); fs[0].focus(); }
+  });
+
+  // 숨은 안전망: 아주 무거운 말이 적혔을 때만 뜬다 (평소에는 아무에게도 안 보임).
+  // 여러 나라에 낼 앱이라 나라별 전화번호는 넣지 않고, 어디서나 통하는 말만 쓴다
+  function openCrisis() {
+    openModal(`<h2 id="mTitle">${tr('c_title')}</h2>
+      <p>${tr('c_body')}</p>
+      <p class="sub">${tr('c_sub')}</p>
+      <div class="row"><button class="primary" data-act="closeModal" data-autofocus>${tr('c_ok')}</button><button class="link" data-act="forceAdd">${tr('c_force')}</button></div>`);
+  }
+
+  function openLog(focusSel) {
+    const n = data.broken.length, nItems = data.items.length;
+    const both = data.broken.filter(r => r.before && r.after), skipped = n - both.length;
+    // 맨 위 요약: 예상 평균 대 실제 평균을 크게 (올라갔으면 올라간 대로 보여 준다). 3개부터는 '3점 이하' 문장도
+    let sum = '';
+    if (both.length) {
+      const avg = k => (Math.round(both.reduce((a, r) => a + r[k], 0) / both.length * 10) / 10).toString();
+      const v = { n: both.length, b: avg('before'), a: avg('after'), s: pl(both.length) };
+      sum = vsHTML(v.b, v.a, tr('log_avg', v)) + `<p class="cap">${tr('log_avg_cap', v)}</p>`;
+    }
+    if (both.length >= 3) {
+      const light = both.filter(r => r.after <= 3).length;
+      sum += `<p>${tr('log_light', { n: both.length, k: `<b>${light}</b>`, s: pl(both.length) })}${skipped ? ` <span class="sub">${tr('log_skipped', { n: skipped, s: pl(skipped) })}</span>` : ''}</p>`;
+    }
+    const d = fmtWhen;
+    const rows = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const r = data.broken[i];
+      rows.push(`<li><i>${String(i + 1).padStart(2, '0')}</i><span>${esc(r.text)}</span><em>${r.before ?? '–'} → ${r.after ?? '–'}</em><time>${d(r.at)}</time>
+        <button class="link rm" data-act="rmRec" data-i="${i}">${tr(confirmKey === 'rm' + i ? 'log_rm_yes' : 'log_rm')}</button></li>`);
+    }
+    const resets = [];
+    if (n) resets.push(`<button class="link" data-act="clearLog">${tr(confirmKey === 'clearLog' ? 'log_clear_yes' : 'log_clear', { n, s: pl(n) })}</button>`);
+    if (nItems) resets.push(`<button class="link" data-act="resetAll">${tr(confirmKey === 'resetAll' ? 'log_reset_yes' : 'log_reset', { n, m: nItems, s: pl(n) })}</button>`);
+    openModal(`<h2 id="mTitle"><small>RECORDS</small>${tr('log_title')}</h2>${sum}
+      ${n ? `<ul class="log">${rows.join('')}</ul>` : `<p>${tr('log_empty')}</p>`}
+      <div class="row"><button class="primary" data-act="closeModal" data-autofocus>${tr('close')}</button></div>
+      ${resets.length ? `<div class="resets">${resets.join('')}</div>` : ''}`, focusSel);
+  }
+
+  // 지운 기록이 진행 중인 단계·애니메이션에 걸려 있으면 같이 정리
+  function afterRecordsRemoved() {
+    if (starAnim && !data.broken.includes(starAnim.rec)) starAnim = null;
+    if (pendingRec && !data.broken.includes(pendingRec)) {
+      pendingRec = null;
+      if (data.run && data.run.phase === 'after') data.run = null;
+      if (state === 'after') { persist(); cur = 0; go(data.items.length ? 'home' : 'input'); return; }
+    }
+    persist();
+  }
+
+  // 부수는 순간 완료를 저장한다 (실제 점수는 그다음에 붙인다. 점수 전에 앱을 닫아도 완료는 남는다)
+  function commitBreak() {
+    const it = data.items[cur]; if (!it) return;
+    const s = cubeSize(), c = cube ? cube.center : [W / 2, H * 0.4];
+    let tx, ty, tries = 0;
+    do { tx = rand(24, W - 24); ty = rand(70, H - 60); tries++; }
+    while (tries < 50 && Math.hypot(tx - c[0], ty - c[1]) < s * 2.6);
+    const rec = { id: Date.now(), text: it.text, before: it.before, after: null, at: Date.now(), x: tx / W, y: ty / H, r: rand(1.2, 2.3), ph: rand(0, 6.28) };
+    if (it.done) rec.done = true;
+    data.broken.push(rec); data.items.splice(cur, 1); cur = 0;
+    data.run = { phase: 'after', recId: rec.id }; persist();
+    pendingRec = rec;
+    // 별은 결과 화면에서 날아간다 (그 전까지는 숨김)
+    starAnim = { rec, sx: cut ? cut.mid[0] : W / 2, sy: cut ? cut.mid[1] : H / 2, born: Infinity, dur: 0.9, counted: false };
+  }
+
+  function finishAfter(after) {
+    const rec = pendingRec; pendingRec = null; data.run = null;
+    if (!rec) { persist(); cur = 0; go(data.items.length ? 'home' : 'input'); return; }
+    rec.after = after; persist();
+    // 콤보 = 오늘 부순 개수 (한 번 부수는 데 몇 분 걸리므로 "하루 안에 연달아"로 센다)
+    const today = new Date().toDateString();
+    const combo = data.broken.filter(x => new Date(x.at).toDateString() === today).length;
+    lastResult = { before: rec.before, after, combo };
+    if (starAnim && starAnim.rec === rec) starAnim.born = nowS() + 0.2; else starAnim = null;
+    go('result');
+  }
+
+  // '언제 할래?'에서 고른 때가 지난 뒤 앱을 열면, 그 일을 앞에 두고 한 줄만 조용히 알려 준다. 일마다 딱 한 번, 재촉 없음.
+  // 웹 시제품이라 앱이 닫힌 동안 폰 알림을 보내지는 못한다 (실제 알림은 앱 기술을 정한 뒤).
+  // '밥 먹고 나서'·'씻고 나서'는 시각이 없어서 30분 뒤부터로 어림잡았다 (정해진 근거 없는 임시 값)
+  function whenDue(it) {
+    if (!it.when || !it.whenAt || it.whenNudged) return false;
+    if (it.when === 'w3') return new Date().toDateString() !== new Date(it.whenAt).toDateString() && Date.now() > it.whenAt;
+    return Date.now() - it.whenAt >= 30 * 60000;
+  }
+  function startGame() {
+    if (state !== 'title') return; sndCoin(); spawnT = nowS();
+    const i = data.items.findIndex(whenDue);
+    if (i >= 0) { cur = i; data.items[i].whenNudged = true; persist(); }
+    go(data.items.length ? 'home' : 'input');
+    if (i >= 0) { const w = tr(data.items[i].when); setTimeout(() => toast(tr('when_here', { w }), 4000), 500); }
+  }
+
+  // 버튼 처리
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    ensureAudio();
+    const a = b.dataset.act;
+    switch (a) {
+      case 'start': startGame(); break;
+      case 'go': go('fear'); break;
+      case 'add': if (data.items.length < 3) { inputMode = 'start'; showHints = false; go('input'); } break;
+      case 'addDone': inputMode = 'done'; showHints = false; go('input'); break;
+      case 'toggleMode': {
+        const t = $('inText') ? $('inText').value : '';
+        inputMode = inputMode === 'done' ? 'start' : 'done'; showHints = false; prefill = t; render(); break;
+      }
+      case 'toggleHints': { const t = $('inText') ? $('inText').value : ''; showHints = !showHints; prefill = t; render(); break; }
+      case 'hint': showHints = false; prefill = b.textContent; render(); break;
+      case 'again': if (starRec && data.items.length < 3) { prefill = starRec.text; inputMode = 'start'; showHints = false; closeModal(); go('input'); } break;
+      case 'cancelInput': inputMode = 'start'; showHints = false; go('home'); break;
+      case 'del': confirmDel = true; render(); break;
+      case 'delNo': confirmDel = false; render(); break;
+      case 'delYes':
+        data.items.splice(cur, 1); persist(); confirmDel = false; cur = 0; spawnT = nowS();
+        go(data.items.length ? 'home' : 'input'); break;
+      case 'fear': {
+        const it = data.items[cur]; it.before = b.dataset.n ? +b.dataset.n : null; delete it.when; delete it.whenAt; delete it.whenNudged;
+        phrase = pickPhrase();
+        startTimer();
+        setRun({ phase: 'timer', itemId: it.id, timerEnd, phrase });
+        go('timer'); break;
+      }
+      case 'armBtn': arm(); break;
+      case 'timerPick':
+        openModal(`<p id="mTitle">${tr('t_q')}</p>
+          <div class="whens">${TIMER_OPTS.map(m => `<button class="chip when" data-act="timerSet" data-m="${m}" aria-pressed="${m === timerMin}">${m ? tr('t_min', { n: m }) : tr('t_none')}</button>`).join('')}</div>`);
+        break;
+      case 'timerSet': {
+        timerMin = +b.dataset.m;
+        try { localStorage.setItem('bf-timer', String(timerMin)); } catch (e) {}
+        if (THREE_MIN_KEYS[phrase] && timerMin !== 3) phrase = pickPhrase();
+        startTimer();
+        const it = data.items[cur]; if (it) setRun({ phase: 'timer', itemId: it.id, timerEnd, phrase });
+        closeModal(); render(); break;
+      }
+      case 'breakBtn':
+        if (state === 'armed' && cube) {
+          const c = cube.center, s = cubeSize() * scaleCur * 1.6, an = rand(-0.35, 0.35);
+          trigger([c[0] - Math.cos(an) * s, c[1] - Math.sin(an) * s], [c[0] + Math.cos(an) * s, c[1] + Math.sin(an) * s]);
+        }
+        break;
+      case 'later': {
+        // 탓하지 않고, 언제 할지만 한 번 골라 보게 (안 골라도 됨). 근거: Owens 등 2008, Wohl 등 2010
+        setRun(null); go('home');
+        openModal(`<p id="mTitle">${tr('when_q')}</p>
+          <div class="whens">${['w1', 'w2', 'w3'].map(k => `<button class="chip when" data-act="when" data-w="${k}">${tr(k)}</button>`).join('')}</div>
+          <button class="link" data-act="whenSkip">${tr('w_skip')}</button>`);
+        break;
+      }
+      case 'when': {
+        const it = data.items[cur];
+        if (it) { it.when = b.dataset.w; it.whenAt = Date.now(); delete it.whenNudged; persist(); }
+        closeModal(); render(); toast(tr('when_ok')); break;
+      }
+      case 'whenSkip': closeModal(); toast(tr('come_back')); break;
+      case 'after': finishAfter(b.dataset.n ? +b.dataset.n : null); break;
+      case 'resultDone': spawnT = nowS(); cur = 0; go(data.items.length ? 'home' : 'input'); break;
+      case 'resultMore': inputMode = 'start'; showHints = false; go('input'); break;
+      case 'log': $('panel').hidden = true; openLog(); break;
+      case 'closeModal': closeModal(); break;
+      case 'forceAdd': closeModal(); addItem(pendingText, inputMode === 'done'); break;
+      case 'rmRec': {
+        const i = +b.dataset.i, key = 'rm' + i;
+        if (confirmKey !== key) { confirmKey = key; openLog(`[data-act="rmRec"][data-i="${i}"]`); break; }
+        confirmKey = ''; data.broken.splice(i, 1); afterRecordsRemoved();
+        if (!$('modal').hidden) openLog(); break;
+      }
+      case 'clearLog':
+        if (confirmKey !== 'clearLog') { confirmKey = 'clearLog'; openLog('[data-act="clearLog"]'); break; }
+        confirmKey = ''; data.broken = []; afterRecordsRemoved();
+        if (!$('modal').hidden) openLog(); break;
+      case 'resetAll':
+        if (confirmKey !== 'resetAll') { confirmKey = 'resetAll'; openLog('[data-act="resetAll"]'); break; }
+        data = { items: [], broken: [], run: null }; persist(); starAnim = null; pendingRec = null; cur = 0; closeModal(); go('input'); break;
+    }
+  });
+  document.addEventListener('submit', e => {
+    if (e.target.id !== 'inForm') return;
+    e.preventDefault();
+    const txt = $('inText').value.trim(); if (!txt) { $('inText').focus(); return; }
+    if (isCrisis(txt)) { pendingText = txt; openCrisis(); return; }
+    addItem(txt, inputMode === 'done');
+  });
+
+  // ---------- 파괴 ----------
+  // 그은 선을 기준으로 블록의 칸들이 양쪽으로 튄다. 파편은 전부 네모 도트
+  function trigger(a, b) {
+    const s = cubeSize() * scaleCur, c = cube.center, u = cube.u;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]), d = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+    cut = { a, b, d, mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], len };
+    frozen = cube;
+    go('frozen');
+    const k = s / 100;
+    const split = Math.max(0, Math.min(1, (S.shards - 20) / 140)); // 설정 '파편 수': 칸이 4조각으로 더 쪼개질 확률
+    shards = [];
+    for (const cell of frozen.cells) {
+      const parts = Math.random() < split ? 2 : 1, w = u / parts;
+      for (let py = 0; py < parts; py++) for (let px = 0; px < parts; px++) {
+        const cx = cell.x + (px + 0.5) * w, cy = cell.y + (py + 0.5) * w;
+        const off = d[0] * (cy - a[1]) - d[1] * (cx - a[0]), sg = off >= 0 ? 1 : -1;
+        const nrm = [-d[1] * sg, d[0] * sg], close = 1 - Math.min(1, Math.abs(off) / (s * 1.5));
+        const push = (80 + Math.random() * 220 + close * 280) * k, along = rand(40, 260) * k, outw = rand(0.8, 2.6);
+        shards.push({ x: cx, y: cy, w,
+          vx: nrm[0] * push + d[0] * along + (cx - c[0]) * outw,
+          vy: nrm[1] * push + d[1] * along + (cy - c[1]) * outw - rand(60, 240) * k,
+          color: cell.color, life: rand(1.1, 1.9) });
+      }
+    }
+    ensureAudio(); sndImpact();
+    vibrate([18, Math.max(10, S.hitstop - 18), 70, 40, 35]);
+  }
+
+  function release(now) {
+    commitBreak();
+    go('broken'); shakeT = now; flashT = now;
+    sndShatter();
+    const s = cubeSize() * scaleCur, k = s / 100, n = [-cut.d[1], cut.d[0]];
+    for (let i = 0; i < 26; i++) {
+      const t = Math.random(), sg = Math.random() < 0.5 ? 1 : -1, sp = rand(250, 900) * k;
+      const ang = Math.atan2(n[1] * sg, n[0] * sg) + rand(-0.9, 0.9);
+      sparks.push({ x: cut.a[0] + (cut.b[0] - cut.a[0]) * t, y: cut.a[1] + (cut.b[1] - cut.a[1]) * t,
+        vx: Math.cos(ang) * sp + cut.d[0] * rand(-100, 300) * k, vy: Math.sin(ang) * sp, life: rand(0.25, 0.5), max: 0.5, c: i % 4 });
+    }
+    rings.push({ x: cut.mid[0], y: cut.mid[1], t: now, r: s * 3.2 });
+  }
+
+  // ---------- 캔버스 입력 ----------
+  const pt = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // 한 번에 손가락 하나만 따라간다 (두 번째 손가락은 무시)
+  cv.addEventListener('pointerdown', e => {
+    ensureAudio(); $('panel').hidden = true;
+    if (down && down.id !== e.pointerId) return;
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    const p = pt(e), now = nowS();
+    down = { p, id: e.pointerId };
+    if (state === 'armed') {
+      trail = [{ x: p[0], y: p[1], t: now }];
+      stroke = { last: p, inside: !!(cube && inPoly(p, cube.hull)), entry: p, id: e.pointerId };
+    }
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!stroke || e.pointerId !== stroke.id || state !== 'armed' || !cube) return;
+    const p = pt(e), now = nowS();
+    trail.push({ x: p[0], y: p[1], t: now });
+    const prev = stroke.last; stroke.last = p;
+    const h = cube.hull, ts = [];
+    for (let i = 0; i < h.length; i++) { const t = segT(prev, p, h[i], h[(i + 1) % h.length]); if (t !== null) ts.push(t); }
+    ts.sort((x, y) => x - y);
+    for (const t of ts) {
+      const q = [prev[0] + (p[0] - prev[0]) * t, prev[1] + (p[1] - prev[1]) * t];
+      if (!stroke.inside) { stroke.inside = true; stroke.entry = q; }
+      else {
+        stroke.inside = false;
+        if (Math.hypot(q[0] - stroke.entry[0], q[1] - stroke.entry[1]) >= cubeSize() * scaleCur * 0.6) { trigger(stroke.entry, q); stroke = null; return; }
+      }
+    }
+  });
+  const end = e => {
+    if (down && down.id !== e.pointerId) return;
+    if (down && state === 'title' && e.type === 'pointerup') { stroke = null; down = null; startGame(); return; }
+    // 장전 상태에서 그었는데 큐브를 다 가로지르지 못했으면 짧게 알려 준다
+    if (stroke && state === 'armed' && e.type === 'pointerup') {
+      const p = pt(e);
+      if (Math.hypot(p[0] - down.p[0], p[1] - down.p[1]) > 40) toast(tr('cross_more'));
+    }
+    // 별 누르기 (조금도 끌지 않은 탭일 때만)
+    if (down && e.type === 'pointerup' && (state === 'home' || state === 'input' || state === 'result') && $('modal').hidden) {
+      const p = pt(e);
+      if (Math.hypot(p[0] - down.p[0], p[1] - down.p[1]) < 10) { const r = starAt(p); if (r) { stroke = null; down = null; openStar(r); return; } }
+    }
+    if (down && state === 'home' && e.type === 'pointerup' && data.items.length > 1) {
+      const p = pt(e), dx = p[0] - down.p[0], dy = p[1] - down.p[1], n = data.items.length;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+        cur = (cur + (dx < 0 ? 1 : -1) + n) % n; spawnT = nowS(); confirmDel = false; render();
+      }
+    }
+    stroke = null; down = null;
+  };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+
+  // ---------- 그리기 (전부 네모 도트, 움직임은 계단식) ----------
+  const easeInOut = x => x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
+  const CUBE_STATES = { title: 1, home: 1, fear: 1, timer: 1, armed: 1, frozen: 1 };
+  const NEON = themeNeon();
+  const FIELD = Array.from({ length: 70 }, (_, i) => ({ x: Math.random(), y: Math.random(), l: i % 3 })); // 배경 별밭
+  const FIELD_COL = TH.field.slice();
+  const R = Math.round;
+  let shownCount = -1;
+
+  function frame() {
+    const now = nowS(), dt = Math.min(0.033, now - lastNow); lastNow = now;
+    if (state !== 'frozen') gameT += dt;
+    if (state === 'frozen' && now - stateT >= S.hitstop / 1000) release(now);
+    if (state === 'broken' && now - stateT >= 1.0) go('after');
+
+    // 타이머
+    if (state === 'timer' && timerEnd > 0) {
+      const el = $('clock'), remain = Math.max(0, timerEnd - Date.now());
+      if (el) {
+        if (remain > 0) { const sec = Math.ceil(remain / 1000), txt = `${String(sec / 60 | 0).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`; if (el.textContent !== txt) el.textContent = txt; }
+        else if (!timerDone) { timerDone = true; el.className = 'clock done'; el.textContent = tr('timer_end'); sndDing(); vibrate(40); }
+      }
+    }
+
+    // 블록 위치·크기 (상태마다 목표값으로)
+    const s0 = cubeSize(), [tScale, tCy] = cubeTarget();
+    if (state !== 'frozen') { scaleCur += (tScale - scaleCur) * Math.min(1, dt * 7); cyCur += (tCy - cyCur) * Math.min(1, dt * 7); }
+    const sp = Math.max(0.25, Math.ceil(Math.min(1, (now - spawnT) / 0.24) * 4) / 4); // 4단계로 커지며 등장
+    const bob = RM.matches ? 0 : R(Math.sin(gameT * 1.7) * 1.5) * 3;
+    const c = [R(W / 2), R(H * cyCur) + bob];
+    const showCube = CUBE_STATES[state] && (data.items[cur] || state === 'title');
+    if (showCube && state !== 'frozen') cube = blockCells(c, s0 * scaleCur * sp);
+    const showLabel = showCube && state !== 'frozen' && state !== 'title';
+    labelEl.style.opacity = showLabel ? 1 : 0;
+    labelEl.style.top = (H * cyCur + s0 * scaleCur * 1.5) + 'px';
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = TH.v['--bg']; ctx.fillRect(0, 0, W, H);
+    const st = now - shakeT;
+    if (st < 0.45 && S.shake > 0 && !RM.matches) { const amp = S.shake * Math.exp(-st * 9); ctx.translate(R(rand(-amp, amp) / 2) * 2, R(rand(-amp, amp) / 2) * 2); }
+
+    // 배경 별밭: 세 겹이 천천히 아래로 흐른다
+    for (const f of FIELD) {
+      const y = RM.matches ? f.y : (f.y + gameT * (0.004 + f.l * 0.004)) % 1;
+      ctx.fillStyle = FIELD_COL[f.l]; ctx.fillRect(R(f.x * W), R(y * H), 2, 2);
+    }
+
+    // 별 (부순 기록 하나당 하나) + 점선 별자리
+    let prev = null, count = 0, idx = 0;
+    for (const r of data.broken) {
+      let x = r.x * W, y = r.y * H; idx++;
+      if (starAnim && starAnim.rec === r && !starAnim.counted) {
+        if (now < starAnim.born) continue;
+        const p = Math.min(1, (now - starAnim.born) / starAnim.dur), e = easeInOut(p);
+        x = starAnim.sx + (x - starAnim.sx) * e; y = starAnim.sy + (y - starAnim.sy) * e;
+        if (p >= 1) { starAnim.counted = true; sndStar(); plusOne(); numEl.classList.add('pop'); setTimeout(() => numEl.classList.remove('pop'), 180); }
+        else { drawStar(x, y, 5, true, '#ffffff'); continue; }
+      }
+      count++;
+      if (prev) { // 점선
+        const dx = x - prev[0], dy = y - prev[1], n = Math.max(1, Math.hypot(dx, dy) / 10 | 0);
+        ctx.fillStyle = hexA(TH.v['--cyan'], 0.22);
+        for (let i = 1; i < n; i++) ctx.fillRect(R(prev[0] + dx * i / n), R(prev[1] + dy * i / n), 2, 2);
+      }
+      const tw = RM.matches ? true : Math.floor(now * 2 + r.ph) % 2 === 0; // 두 단계로 깜빡
+      drawStar(x, y, 4, tw, NEON[idx % 2]);
+      prev = [x, y];
+    }
+    if (count !== shownCount) { shownCount = count; numEl.textContent = String(count).padStart(3, '0'); }
+
+    // 블록
+    if (showCube) {
+      if (state === 'frozen') drawBlock(frozen, now - stateT < 0.06 && !RM.matches, '#ffffff', -2);
+      else if (cube) {
+        const edge = state === 'armed' ? (RM.matches || Math.floor(now * 6) % 2 ? TH.v['--yel'] : '#ffffff') : TH.v['--cyan']; // 장전됨: 테두리가 깜빡
+        const shine = RM.matches ? -2 : Math.floor(gameT * 14) % 44; // 가끔 대각선 반짝임이 지나감
+        drawBlock(cube, false, edge, shine);
+      }
+    }
+
+    // 파편: 네모 도트, 사라지기 직전에 깜빡
+    if (shards.length && state !== 'frozen') {
+      const k = s0 / 100;
+      for (const p of shards) {
+        p.vy += 1500 * k * dt; p.vx *= 0.992; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+        if (p.life <= 0 || (p.life < 0.35 && Math.floor(p.life * 24) % 2)) continue;
+        const w = Math.ceil(p.w);
+        ctx.fillStyle = p.color; ctx.fillRect(R(p.x - w / 2), R(p.y - w / 2), w, w);
+      }
+      shards = shards.filter(p => p.life > 0);
+    }
+
+    // 불꽃
+    for (const p of sparks) {
+      p.life -= dt; p.vx *= 0.9; p.vy *= 0.9; p.vy += 300 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.life <= 0) continue;
+      ctx.fillStyle = NEON[p.c]; ctx.fillRect(R(p.x) - 2, R(p.y) - 2, 4, 4);
+    }
+    sparks = sparks.filter(p => p.life > 0);
+    // 폭발: 16방향으로 퍼지는 도트 두 겹
+    for (const r of rings) {
+      const p = (now - r.t) / 0.42; if (p > 1) continue;
+      const e = 1 - (1 - p) ** 3;
+      for (let i = 0; i < 16; i++) {
+        const an = i * Math.PI / 8, cx = Math.cos(an), sy = Math.sin(an);
+        ctx.fillStyle = p < 0.5 ? '#ffffff' : TH.v['--yel']; ctx.fillRect(R(r.x + cx * r.r * e) - 3, R(r.y + sy * r.r * e) - 3, 6, 6);
+        ctx.fillStyle = TH.v['--mag']; ctx.fillRect(R(r.x + cx * r.r * e * 0.6) - 2, R(r.y + sy * r.r * e * 0.6) - 2, 4, 4);
+      }
+    }
+    rings = rings.filter(r => now - r.t < 0.42);
+    // 벤 자국: 도트로 이은 선
+    if (cut && (state === 'frozen' || (state === 'broken' && now - stateT < 0.28 && Math.floor((now - stateT) * 30) % 2 === 0))) {
+      const ext = cut.len * 0.8, total = cut.len + ext * 2, n = total / 6 | 0;
+      ctx.save(); ctx.shadowColor = TH.v['--cyan']; ctx.shadowBlur = 12; ctx.fillStyle = '#ffffff';
+      for (let i = 0; i <= n; i++) {
+        const t = -ext + total * i / n;
+        ctx.fillRect(R(cut.a[0] + cut.d[0] * t) - 2, R(cut.a[1] + cut.d[1] * t) - 2, 4, 4);
+      }
+      ctx.restore();
+    }
+    // 손가락 자국
+    trail = trail.filter(p => now - p.t < 0.14);
+    for (let i = 0; i < trail.length; i++) {
+      const p = trail[i], life = 1 - (now - p.t) / 0.14, w = 2 + R(life * 3) * 2;
+      ctx.fillStyle = life > 0.5 ? '#ffffff' : TH.v['--cyan']; ctx.fillRect(R(p.x - w / 2), R(p.y - w / 2), w, w);
+    }
+
+    // 맞는 순간 화면 전체가 잠깐 하얗게
+    const fl = now - flashT;
+    if (fl < 0.1 && !RM.matches) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(0, 0, W, H); }
+
+    requestAnimationFrame(frame);
+  }
+  function plusOne() {
+    const r = numEl.getBoundingClientRect(), el = document.createElement('div');
+    el.className = 'plus'; el.textContent = '+1';
+    el.style.left = (r.left - 4) + 'px'; el.style.top = (r.bottom + 6) + 'px';
+    document.body.appendChild(el); setTimeout(() => el.remove(), 950);
+  }
+  // 도트 별: 가운데 한 칸 + (밝을 때) 십자 네 칸
+  function drawStar(x, y, q, bright, color) {
+    x = R(x); y = R(y);
+    ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = bright ? 10 : 4; ctx.fillStyle = bright ? '#ffffff' : color;
+    ctx.fillRect(x - q / 2 | 0, y - q / 2 | 0, q, q);
+    if (bright) { ctx.fillStyle = color; for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillRect((x - q / 2 | 0) + ax * q, (y - q / 2 | 0) + ay * q, q, q); }
+    ctx.restore();
+  }
+
+  render();
+  requestAnimationFrame(frame);
+})();
+</script>
