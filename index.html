@@ -952,7 +952,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:' && window.top
       ${data.items.length < 3 ? `<button class="link" data-act="again">${tr('again')}</button>` : ''}</div>`);
   }
   function starAt(p) {
-    let best = null, bd = 24;
+    let best = null, bd = 30;
     for (const r of data.broken) {
       if (starAnim && starAnim.rec === r && !starAnim.counted) continue;
       const d = Math.hypot(r.x * W - p[0], r.y * H - p[1]);
@@ -1328,7 +1328,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:' && window.top
         const p = Math.min(1, (now - starAnim.born) / starAnim.dur), e = easeInOut(p);
         x = starAnim.sx + (x - starAnim.sx) * e; y = starAnim.sy + (y - starAnim.sy) * e;
         if (p >= 1) { starAnim.counted = true; sndStar(); plusOne(); numEl.classList.add('pop'); setTimeout(() => numEl.classList.remove('pop'), 180); }
-        else { drawStar(x, y, 5, true, '#ffffff'); continue; }
+        else { drawStar(x, y, 7, true, '#ffffff'); continue; }
       }
       count++;
       if (prev) { // 점선
@@ -1337,7 +1337,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:' && window.top
         for (let i = 1; i < n; i++) ctx.fillRect(R(prev[0] + dx * i / n), R(prev[1] + dy * i / n), 2, 2);
       }
       const tw = RM.matches ? true : Math.floor(now * 2 + r.ph) % 2 === 0; // 두 단계로 깜빡
-      drawStar(x, y, 4, tw, NEON[idx % 2]);
+      drawStar(x, y, 6, tw, NEON[idx % 2]); // 별 한 칸 6px (전에는 4px라 찾고 누르기 어려웠다)
       prev = [x, y];
     }
     if (count !== shownCount) { shownCount = count; numEl.textContent = String(count).padStart(3, '0'); }
