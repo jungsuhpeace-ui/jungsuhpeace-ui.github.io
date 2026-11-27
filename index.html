@@ -867,15 +867,18 @@ if ('serviceWorker' in navigator && location.protocol === 'https:' && window.top
   // 결과를 그림 한 장으로 공유한다. 그림에는 예상 → 실제 숫자, 결과 한 줄, 앱 이름만 담긴다.
   // 무엇을 미뤘는지(할 일 글)는 넣지 않는다 (2026-11-28 결정). 사용자가 버튼을 누를 때만 밖으로 나간다.
   function cardBase(draw) {
-    const c = document.createElement('canvas'); c.width = 1080; c.height = 1350;
+    // 세로로 긴 스토리 크기(9:16, 2026-11-28). 글과 숫자는 가운데 1080×1350 안에 두어 4:5로 잘려도 다 보인다
+    const CH = 1920, DY = (CH - 1350) / 2;
+    const c = document.createElement('canvas'); c.width = 1080; c.height = CH;
     const g = c.getContext('2d'), cs = getComputedStyle(document.documentElement), v = TH.v;
     const PX = cs.getPropertyValue('--pixel') || 'monospace', KR = cs.getPropertyValue('--kr') || 'sans-serif';
-    g.fillStyle = v['--bg']; g.fillRect(0, 0, 1080, 1350);
-    for (let i = 0; i < 90; i++) { // 배경 별밭 (늘 같은 자리)
-      const x = (i * 197 + 61) % 1080, y = (i * 331 + 97) % 1350;
+    g.fillStyle = v['--bg']; g.fillRect(0, 0, 1080, CH);
+    for (let i = 0; i < 128; i++) { // 배경 별밭 (늘 같은 자리)
+      const x = (i * 197 + 61) % 1080, y = (i * 331 + 97) % CH;
       g.fillStyle = [v['--faint'], v['--muted'], v['--cyan']][i % 3]; g.fillRect(x, y, i % 5 ? 4 : 6, i % 5 ? 4 : 6);
     }
     g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    g.save(); g.translate(0, DY);
     const glow = (col, blur) => { g.shadowColor = col; g.shadowBlur = blur; };
     // 앱 이름
     g.font = `88px ${PX}`;
@@ -893,7 +896,8 @@ if ('serviceWorker' in navigator && location.protocol === 'https:' && window.top
     draw({ g, v, PX, KR, glow, para });
     glow('transparent', 0);
     g.font = `34px ${KR}`; g.fillStyle = v['--muted']; g.fillText(tr('tagline'), 540, 1262);
-    g.fillStyle = 'rgba(0,0,0,.16)'; for (let y = 0; y < 1350; y += 6) g.fillRect(0, y, 1080, 2); // 주사선
+    g.restore();
+    g.fillStyle = 'rgba(0,0,0,.16)'; for (let y = 0; y < CH; y += 6) g.fillRect(0, y, 1080, 2); // 주사선
     return c;
   }
   const shareCard = (b, a) => cardBase(({ g, v, PX, KR, glow, para }) => {
