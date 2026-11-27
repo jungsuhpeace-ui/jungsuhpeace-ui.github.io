@@ -1,13 +1,11 @@
 // Breakfree 오프라인용 서비스 워커. 앱 파일을 한 번 받아 두고, 인터넷이 없어도 열리게 한다.
 // 앱 파일을 고치면 VERSION을 올린다 (그래야 새 파일을 다시 받는다).
-const VERSION = 'bf-v2';
+const VERSION = 'bf-v3';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './fonts/PressStart2P-latin.woff2', './fonts/Galmuri11.woff2',
-  './fonts/fusion-pixel-12px-proportional-zh_hans.woff2',
-  './fonts/fusion-pixel-12px-proportional-zh_hant.woff2',
   './icons/icon-192.png', './icons/icon-512.png',
-  './privacy/ko.html', './privacy/en.html', './privacy/ja.html', './privacy/zh-Hans.html', './privacy/zh-Hant.html'
+  './privacy/ko.html', './privacy/en.html', './privacy/ja.html'
 ];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
