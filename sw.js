@@ -1,6 +1,6 @@
 // Breakfree 오프라인용 서비스 워커. 앱 파일을 한 번 받아 두고, 인터넷이 없어도 열리게 한다.
 // 앱 파일을 고치면 VERSION을 올린다 (그래야 새 파일을 다시 받는다).
-const VERSION = 'bf-v16';
+const VERSION = 'bf-v17';
 const FILES = [
   './', './index.html', './manifest.webmanifest',
   './fonts/PressStart2P-latin.woff2', './fonts/Galmuri11.woff2',
